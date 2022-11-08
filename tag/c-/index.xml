@@ -1,0 +1,475 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes"?><rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom"><channel><title>c++ | Richard's Blog</title><link>https://rsouthern.github.io/tag/c-/</link><atom:link href="https://rsouthern.github.io/tag/c-/index.xml" rel="self" type="application/rss+xml"/><description>c++</description><generator>Wowchemy (https://wowchemy.com)</generator><language>en-uk</language><lastBuildDate>Thu, 30 Jun 2016 00:00:00 +0000</lastBuildDate><image><url>https://rsouthern.github.io/images/icon_hu0365f2187e15210a9118469a64220edc_142871_512x512_fill_lanczos_center_2.png</url><title>c++</title><link>https://rsouthern.github.io/tag/c-/</link></image><item><title>A Templated Implementation of Noise Texture</title><link>https://rsouthern.github.io/post/noisetexture/</link><pubDate>Thu, 30 Jun 2016 00:00:00 +0000</pubDate><guid>https://rsouthern.github.io/post/noisetexture/</guid><description>&lt;h3 id="introduction">Introduction&lt;/h3>
+&lt;p>The icon for this page was from my attempt to recreate a realtime shader for a varnished woodgrain effect. This approach requires the &lt;a href="http://libnoise.sourceforge.net/examples/textures/">combination of multiple layers&lt;/a> of &lt;a href="http://mrl.nyu.edu/~perlin/">Perlin&lt;/a> &lt;a href="https://en.wikipedia.org/wiki/Perlin_noise">noise&lt;/a>, which is probably infeasible to &lt;a href="https://github.com/ashima/webgl-noise/wiki">generate on the fly within the fragment shader&lt;/a> (although I&amp;rsquo;d love to be proven wrong). The generation of the wood grain shader will be saved for another post - in this one I&amp;rsquo;d like to discuss how I implemented a generic C++ template for the initialisation of the &amp;ldquo;general&amp;rdquo; dimensional noise texture on OpenGL.&lt;/p>
+&lt;h3 id="the-high-level-interface">The High Level Interface&lt;/h3>
+&lt;p>The central idea behind this class was to provide the following generalisations:&lt;/p>
+&lt;ol>
+&lt;li>&lt;em>General Dimensional Textures&lt;/em> - noise textures are typically either 2D or 3D (so you can &amp;ldquo;slice through&amp;rdquo; your material and expect a consistent pattern).&lt;/li>
+&lt;li>&lt;em>Generic Generator Functions&lt;/em> - the function that actually generates the noise must be completely generic.&lt;/li>
+&lt;/ol>
+&lt;p>For (1) above, this is realised by using a simple template parameter DIM:&lt;/p>
+&lt;pre>&lt;code class="language-cpp">template &amp;lt;size_t DIM&amp;gt;
+class NoiseTexture
+&lt;/code>&lt;/pre>
+&lt;p>So my interface to creating a 3D texture is something like:&lt;/p>
+&lt;pre>&lt;code class="language-cpp"> MyNoiseTexture&amp;lt;3&amp;gt; m_noise;
+&lt;/code>&lt;/pre>
+&lt;p>For (2), there were several ways to approach this. I could, for example, have passed a generator function / functor class as a template parameter. This would have required me to create different classes for each type of generation. However there are a couple of reasons why I used inheritance instead of this approach (which could be called the &lt;a href="http://www.bogotobogo.com/DesignPatterns/strategy.php">strategy pattern&lt;/a>):&lt;/p>
+&lt;ul>
+&lt;li>A function cannot store state, which is need for many noise generators, for example &lt;a href="http://www.boost.org/doc/libs/1_61_0/doc/html/boost_random.html">boost&lt;/a> or &lt;a href="http://libnoise.sourceforge.net/index.html">libnoise&lt;/a>,&lt;/li>
+&lt;li>A functor can store state, but will have the same level of class management and complexity as using inheritance, but more importantly&lt;/li>
+&lt;li>I may want to override other parts of the class to support parallel noise generation.&lt;/li>
+&lt;/ul>
+&lt;p>The interface noisetexture.h provides is to inherit from the base class and override the protected function&lt;/p>
+&lt;pre>&lt;code class="language-cpp"> /// A generator function to make the process of building noise easy
+virtual inline GLfloat generator_func(const CoordinateArrayf &amp;amp;) = 0;
+&lt;/code>&lt;/pre>
+&lt;p>This function simply accepts a coordinate in DIM space and returns a floating point value. Note that the NoiseTexture makes use of std::array as it should - this makes sure that this is managed memory rather than pointers. Two different arrays are defined:&lt;/p>
+&lt;pre>&lt;code class="language-cpp"> /// A static (i.e. not dynamic allocated) vector
+typedef std::array&amp;lt;size_t,DIM&amp;gt; CoordinateArray;
+typedef std::array&amp;lt;float, DIM&amp;gt; CoordinateArrayf;
+&lt;/code>&lt;/pre>
+&lt;p>One is for indices and the other for positions. This will be used in the recursive generation of the data block.&lt;/p>
+&lt;h3 id="generating-the-data">Generating the data&lt;/h3>
+&lt;p>Ultimately the initialisation of the OpenGL texture consists of copying a lump of data from the CPU memory to the GPU memory using a call to glTexImage. The following section of code creates the memory, fills it with data and copies it to the GPU:&lt;/p>
+&lt;pre>&lt;code class="language-cpp"> // Allocate a slab of data for the stuffing
+GLfloat *data = (GLfloat*) malloc(sizeof(GLfloat) * pow(m_res,DIM) * 3);
+// Use the recursive function to generate the data recursively
+CoordinateArray coord;
+generate_recurse(DIM, coord, data);
+// Copy our data over to the GPU
+copyTextureDataToGPU(data);
+// Delete our data - it's been copied onto the GPU right?
+free(data);
+&lt;/code>&lt;/pre>
+&lt;p>Unpicking the memory allocation from left to right:&lt;/p>
+&lt;ul>
+&lt;li>sizeof(GLfloat) - the size of an individual value (single precision)&lt;/li>
+&lt;li>pow(m_res,DIM) - the size of the block of data is squared/cubed as you would expect&lt;/li>
+&lt;li>3 - we need RGB values to copy to the GPU&lt;/li>
+&lt;/ul>
+&lt;p>Generate_recurse is defined as follows:&lt;/p>
+&lt;pre>&lt;code class="language-cpp"> /// Recursively generate the data
+virtual void generate_recurse(const size_t &amp;amp;/*dim*/, const CoordinateArray &amp;amp;/*coord*/, GLfloat */*data*/);
+&lt;/code>&lt;/pre>
+&lt;p>It will recursively evaluate the generator function on each of the different positions in the block of memory and write it to the appropriate index:&lt;/p>
+&lt;pre>&lt;code class="language-cpp">template &amp;lt;size_t DIM&amp;gt;
+void NoiseTexture&amp;lt;DIM&amp;gt;::generate_recurse(const size_t &amp;amp;d,
+const CoordinateArray&amp;amp; coord,
+GLfloat *data) {
+size_t dim_length = 1, data_pos = 0, i;
+CoordinateArrayf coordf, tmp;
+CoordinateArray ncoord;
+switch(d) {
+case 0:
+// At the end of the recursion chain we can evaluate the noise function
+for (i=0; i&amp;lt;DIM; ++i) {
+data_pos += coord[i] * dim_length;
+dim_length *= m_res;
+coordf[i] = m_inv_resf * float(coord[i]);
+}
+data_pos *= 3;
+// Fill up the data with data defined by the generator_func()
+for (i=0; i&amp;lt;3; ++i) {
+tmp = coordf; coordf[i] += 1.0f;
+data[data_pos + i] = generator_func(coordf);
+}
+break;
+default:
+// For the rest of the dimensions we recursively call all the remaining coordinates
+ncoord = coord;
+for (i=0; i&amp;lt;m_res; ++i) {
+ncoord[d-1] = i;
+generate_recurse(d-1, ncoord, data);
+}
+}
+}
+&lt;/code>&lt;/pre>
+&lt;p>Note that I have arbitrarily added 1.0f for each of the R, G, B channels to give a bit of a richer data set to play with.&lt;/p>
+&lt;h3 id="opengl-integration">OpenGL integration&lt;/h3>
+&lt;p>There are a number of standard functions which make this class usable in a GL context. For example, the function to find the texture:&lt;/p>
+&lt;pre>&lt;code class="language-cpp">template &amp;lt;size_t DIM&amp;gt;
+void NoiseTexture&amp;lt;DIM&amp;gt;::bind() const {
+if (m_isInit) {
+glBindTexture(m_target, m_texID);
+CheckError(&amp;quot;NoiseTexture&amp;lt;DIM&amp;gt;::bind() - glBindTexture()&amp;quot;);
+}
+}
+&lt;/code>&lt;/pre>
+&lt;p>Note the variable m_target, which is actually a constant, defined using this from within the class declaration:&lt;/p>
+&lt;pre>&lt;code class="language-cpp"> constexpr GLuint target() const {
+switch(DIM) {
+case 1:
+return GL_TEXTURE_1D;
+case 2:
+return GL_TEXTURE_2D;
+case 3:
+return GL_TEXTURE_3D;
+}
+return 0;
+}
+const GLuint m_target = target();
+&lt;/code>&lt;/pre>
+&lt;p>Take a moment to digest this: the function target is actually being executed at &lt;em>compile time&lt;/em>, and this is in fact an example of &lt;a href="https://en.wikipedia.org/wiki/Template_metaprogramming">template metaprogramming&lt;/a> (albeit, a rather simple one). The keyword constexpr allows this function to be executed in setting a constant at compile time. The use of the switch statement (and using multiple return statements in a function) is only allowable in C++14 or better (a simple if-else structure would remove this dependency).&lt;/p>
+&lt;p>The function which copies the data to the GPU is pretty straightforward:&lt;/p>
+&lt;pre>&lt;code class="language-cpp">template &amp;lt;size_t DIM&amp;gt;
+void NoiseTexture&amp;lt;DIM&amp;gt;::copyTextureDataToGPU(GLfloat *data) {
+// Transfer this data to our texture
+glGenTextures(1, &amp;amp;m_texID);
+glBindTexture(m_target, m_texID);
+// Repeat the texture for coordinates &amp;lt;0 or &amp;gt;1
+...
+// Use blending when texels are bigger or smaller than pixels
+...
+// Upload the texture data to the GPU
+switch(DIM) {
+case 1:
+glTexImage1D(m_target, // Target
+0, // Level
+GL_RGB, // Internal Format
+m_res, // width
+0, // border
+GL_RGB, // format
+GL_FLOAT, // type
+data);
+break;
+case 2:
+...
+case 3:
+...
+}
+}
+&lt;/code>&lt;/pre>
+&lt;p>Note that template specialisms could have been used here for the different TexImage calls, but due to the duplication of the texture parameters I decided against it.&lt;/p>
+&lt;h3 id="deriving-your-own-noise-texture-class">Deriving your own Noise Texture class&lt;/h3>
+&lt;p>The simplest example of a derived noise texture class is one which just sets the values in the data block to 1. This is demonstrated in testnoisetexture.h:&lt;/p>
+&lt;pre>&lt;code class="language-cpp">template&amp;lt;size_t DIM&amp;gt;
+class TestNoiseTexture : public NoiseTexture&amp;lt;DIM&amp;gt; {
+public:
+/// Constructor
+explicit TestNoiseTexture(float /*lower*/ = 0.0f,
+float /*upper*/ = 1.0f,
+size_t /*resolution*/ = 64);
+/// Dtor
+~TestNoiseTexture() {}
+protected:
+/// Specialisation of this class to generate pure white noise
+inline GLfloat generator_func(const typename NoiseTexture&amp;lt;DIM&amp;gt;::CoordinateArrayf &amp;amp;);
+};
+template&amp;lt;size_t DIM&amp;gt;
+TestNoiseTexture&amp;lt;DIM&amp;gt;::TestNoiseTexture(float _lower,
+float _upper,
+size_t _resolution)
+: NoiseTexture&amp;lt;DIM&amp;gt;(_lower,_upper,_resolution) {}
+template&amp;lt;size_t DIM&amp;gt;
+inline GLfloat TestNoiseTexture&amp;lt;DIM&amp;gt;::generator_func(const typename NoiseTexture&amp;lt;DIM&amp;gt;::CoordinateArrayf &amp;amp;coord) {
+return 1.0f;
+}
+&lt;/code>&lt;/pre>
+&lt;p>As you see above, all you need to do here is override the virtual generator_func with your own favourite noise generator. See the whitenoisetexture.h example for something a little more interesting. I&amp;rsquo;ll be looking to write a post about how this method was used to create the wood shader soon.&lt;/p>
+&lt;h3 id="downloads">Downloads&lt;/h3>
+&lt;p>Download the source files for these here:&lt;/p>
+&lt;ul>
+&lt;li>&lt;a href="noisetexture.h">noisetexture.h&lt;/a>&lt;/li>
+&lt;li>&lt;a href="testnoisetexture.h">testnoisetexture.h&lt;/a>&lt;/li>
+&lt;li>&lt;a href="whitenoisetexture.h">whitenoisetexture.h&lt;/a>&lt;/li>
+&lt;/ul></description></item><item><title>n-Dimensional Moving Least Squares projection</title><link>https://rsouthern.github.io/post/mls/</link><pubDate>Fri, 01 Apr 2016 00:00:00 +0000</pubDate><guid>https://rsouthern.github.io/post/mls/</guid><description>&lt;h3 id="background">Background&lt;/h3>
+&lt;p>Continuing with the theme of nD implementations of useful algorithms, here is my take on &lt;a href="https://en.wikipedia.org/wiki/Moving_least_squares">Moving Least Squares (MLS)&lt;/a>, a popular method used in engineering and graphics applications for smoothing out noisy point cloud data. Possibly data sources include laser scans, depth sensors (e.g. Kinect) or the like.&lt;/p>
+&lt;p>The basic principle of MLS projection is that you have a &lt;em>noisy point cloud&lt;/em> approximating a &lt;em>surface&lt;/em>. Projection means we&amp;rsquo;re going to take a point from anywhere in space and project it on this surface approximation. We will conveniently also get a surface normal for free as a result of doing this.&lt;/p>
+&lt;h3 id="the-basic-algorithm">The Basic Algorithm&lt;/h3>
+&lt;p>I&amp;rsquo;ll describe the projection algorithm with reference to the following figures:&lt;/p>
+&lt;table width=100%>
+&lt;tr>
+&lt;td>&lt;img width=100% src="mlsproject1.svg"/>&lt;/td>
+&lt;td>&lt;img width=100% src="mlsproject2.svg"/>&lt;/td>
+&lt;td>&lt;img width=100% src="mlsproject3.svg"/>&lt;/td>
+&lt;/tr>
+&lt;/table>
+We are given the original query site \\(q_0)\in\mathbb{R}^n\\) (the red point) and the existing point cloud consisting of points \\(x_i \in \mathbb{R}^n\\) (the black points) (note I'm going to use the indices of the query site and the point cloud differently - the index of \\(q\\) refers to the iteration number of the algorith, the index of \\(x\\) will refer to index of the nearby points). We are also given some query radius \\(r\\) which will contain all the points of interest. Note that the choice of \\(r\\) has a significant effect on the smoothness of the function - this will probably be a topic of discussion for a later post. In the images from right to left:
+1. Identify all the points within the query radius \\(r\\) of \\(q_0\\), i.e. the set of points \\(\\{x_i : \\|x_i - q_0\\| &lt; r\\}\\)
+2. Construct a *best-fit plane* through these points by using a weighted least squares method (more on this later). Then *project* \\(q_0\\) onto this plane to find our next query point \\(q_1\\).
+3. Iterate and continue until two consecutive steps of the projection result in very similar points, i.e. within some \\(\epsilon\\) which is some small error tolerance.
+&lt;p>This is pretty trivially demonstrated using a code snippet from the implementation. In this example &lt;em>cpt&lt;/em> is the current point (e.g. the iterating projected point \(q_j\)), &lt;em>tol&lt;/em> is some user specified tolerance (equivalent to \(\epsilon\)). The rest should mostly be self-explanatory:&lt;/p>
+&lt;pre>&lt;code class="language-cpp"> // Continue this loop until we're close enough to the surface
+while (err &amp;gt; tol) {
+// Perform a least squares projection from the current point onto a best
+// fit hyperplane. The result will tell us if any neighbours were found.
+if (weightedLS(cpt, radius, plane, idxDist) == 0) {
+// What should we do here? throw an error?
+return cpt;
+}
+// If it all went well, we'll have a plane onto which the point can be projected
+tmp = plane.projection(cpt);
+// Our error is just the distance between the input point and our current point
+err = (tmp-cpt).norm();
+// Update our current point to the projected point
+cpt = tmp;
+}
+// If it all went well, we can assume our current point is the best one available
+return cpt;
+&lt;/code>&lt;/pre>
+&lt;p>Note that the function weightedLS() returns the number of points found within the query radius, and modifies the plane to contain the best fit plan through the points. If nothing was found within the radius there is a question of what you should do. Increasing the radius size is an obvious choice, but there may be continuity issues in the query data set.&lt;/p>
+&lt;h3 id="weighted-least-squares">Weighted Least Squares&lt;/h3>
+&lt;p>So it is now important to drill down into the Weighted Least Squares fit function. There are some pretty useful references on everyones favourite academic source &lt;a href="https://en.wikipedia.org/wiki/Least_squares#Weighted_least_squares">here&lt;/a>. There is a much broader discussion here to be had about linear regression for fitting curves to polynomials, but I&amp;rsquo;ll restrict myself to the planar case.&lt;/p>
+&lt;p>The general implicit form for a plane $$\mathbf{n}\cdot(x - x_0)=0,$$ where \(\mathbf{n}\) is a normal to the plane (bold because it is a vector), and \(x_0\) is a point through which the plane passes. So the plane is defined by any point \(x\) for which the above function evaluates to exactly \(0\).&lt;/p>
+&lt;p>If the number of points is equal to the dimensionality the space it is easy enough to find the normal from the input points. For example, the normal to a vector
+$$
+\mathbf{v}= \left[ \begin{array}\ x_1 - x_0 \\ y_1 - y_0 \end{array} \right]
+$$
+between two points in \(\mathbb{R}^2\) is \((-v_y,v_x)\), for higher dimensions use the cross or wedge product.&lt;/p>
+&lt;blockquote>
+&lt;p>As an aside, you might be interested to know that this can also be solved by solving for the &lt;em>null space&lt;/em> of the system of equations given by \(\mathbf{n}\cdot(x - x_0)=0\) - recall that this system is underdetermined because one of the points provided will be \(x_0\). In \(\mathbb{R}^2\), this will be the equivalent of solving for the &lt;em>null space&lt;/em> of
+$$
+\begin{array}\&lt;br>
+\mathbf{n} \cdot \mathbf{v} = 0\&lt;br>
+n_x v_x + n_y v_y = 0
+\end{array}
+$$
+which is of course only non-trivially true when \(\mathbf{n} = (-\mathbf{v}_y,\mathbf{v}_x)\).&lt;/p>
+&lt;/blockquote>
+&lt;p>Note that we can also solve for the normal using the formula \(\mathbf{n}\cdot(x - x_0)=\alpha\) where \(\alpha\) is some arbitrary scalar as the normal is the same if we shifted it along the normal direction. This allows us to formulate the problem into a linear system
+$$X\textbf{n}=\textbf{b},$$
+where \(X\) is the matrix of known points on the plane, \(\mathbf{n}\) is the unknown plane normal, and \(\mathbf{b}\) is some constant vector made up of \(\alpha\)&amp;lsquo;s. For simplicity let&amp;rsquo;s just let \(\alpha=1\) from now on. This is well defined if \(X\) is square, i.e. there are the same number of points as there are dimensions - this is because these points form a &lt;a href="https://en.wikipedia.org/wiki/Simplex">n-simplex&lt;/a> in \(\mathbb{R}^n\).&lt;/p>
+&lt;p>Ok, now what happens if we have more points than dimensions? In this case, we can solve this in the &lt;em>least squares sense&lt;/em>. This is essentially an optimisation problem, solved using the Moore-Penrose &lt;a href="https://en.wikipedia.org/wiki/Least_squares">pseudoinverse&lt;/a>. While there is buckets to write about this, it boils down to premultiplying both sides of the equation by \(X^T\) yielding
+$$X^T X \mathbf{n} = X^T \mathbf{b}.$$
+Note that \(X^T X\) is now a square matrix, the system can be solved and has a unique solution. The solution itself is optimal in a least-squares sense, meaning that it &lt;em>minimizes the sum of the squares of the errors made in the results of each equation&lt;/em>. Or put another way, it spreads the error love evenly between all of the point contributors to the plane.&lt;/p>
+&lt;p>Now applying weights to this should actually be quite straightforward: we&amp;rsquo;ll create some diagonal matrix of weights \(W\) where elements on the diagonal represent the amount we want to &lt;em>weight the error&lt;/em> of each point in \(X\). So a smaller weight would mean that in a least squares sense we are consider the error to be less important. This is incorporated into the system above as follows:
+$$X^T W X \mathbf{n} = X^T W \mathbf{b}.$$
+If we&amp;rsquo;re trying to write our plane equation as \(\mathbf{n}\cdot x = d\) where \(d\) is a constant, a property of the above process is that \(d=1 / |\mathbf{n}| \). Also you must still normalise the resultant normal, e.g. \(\mathbf{n} = \mathbf{n}d\). Note that this whole process works in any dimension - pretty neat.&lt;/p>
+&lt;p>There is also the small issue of how to decide on the weights. Any kernel function would do, and each will have an impact on the overall quality of the reconstruction. Currently I&amp;rsquo;m just inverting the distance, but this could lead to problems when the point is exactly on top of the query point. Other choices of kernel function, such as \(\exp({-s^2})\). Some experimentation depending on application will probably be required.&lt;/p>
+&lt;p>Here is the implementation of this in &lt;em>pointcloud.hpp&lt;/em>:&lt;/p>
+&lt;pre>&lt;code class="language-cpp"> if (m_index.findNeighbors(results, pt.data(), nanoflann::SearchParams())) {
+// Weights matrix
+MatrixXr W(idxDist.size(), idxDist.size()); W.setZero();
+// The matrix of the actual points
+MatrixXr K(idxDist.size(), DIM);
+// The result of the call is true if a neighbour could be found
+typename ResultsVector::iterator it;
+int i,j;
+for (it = idxDist.begin(), i=0; it != idxDist.end(); ++it,++i) {
+// First check to see if this evaluates to 0 exactly (BAD)
+if ((*it).second == REAL(0)) {
+// Set the weight to half the max REAL value (risky)
+W(i,i) = std::numeric_limits&amp;lt;REAL&amp;gt;::max() * REAL(0.5);
+} else {
+// Set the weight to the inverse distance
+W(i,i) = 1.0 / (*it).second;
+}
+// Build the matrix K out of the point data
+for (j=0;j&amp;lt;DIM;++j) K(i,j) = m_data[(*it).first][j];
+}
+// Normalise the weights to make sure they sum to 1
+W = W / W.sum();
+// Now solve the system using the following formula from MATLAB
+// N' = (K'*diag(W)*K) \ (K')*diag(W)*(-ones(size(I,1),1));
+// d = 1/norm(N);
+// N = N' * d;
+VectorDr ans;
+MatrixXr A = K.transpose() * W * K;
+VectorDr b = -K.transpose() * W.diagonal();
+ans = A.llt().solve(b);
+REAL d = REAL(1) / ans.norm();
+Hyperplane _h(ans * d, d);
+h = _h;
+// For the results structure to be useful we need it to store the weights from W, so
+// we copy these back into it
+for (it = idxDist.begin(), i=0; it != idxDist.end(); ++it,++i) {
+(*it).second = W(i,i);
+}
+// We return the number of effective matches
+return idxDist.size();
+} else {
+// No neighbours found! What do we do?
+return 0;
+}
+&lt;/code>&lt;/pre>
+&lt;p>The general dimensional hyperplane is managed by &lt;a href="http://eigen.tuxfamily.org/dox/classEigen_1_1Hyperplane.html">Eigen::Hyperplane&lt;/a> which allows us to do projections (see previous code snippet). Note that the solver used is Eigen&amp;rsquo;s Cholesky solver, which is very fast by requires a matrix that is symmetric positive definite. Fortunately our matrix \(X^T W X\) has these properties. In practice it is very unwise to solve systems like \(A\textbf{x}=\textbf{b}\) by inverting \(A\).&lt;/p>
+&lt;h3 id="implementation-details">Implementation details&lt;/h3>
+&lt;p>The plan was to make this implementation general dimensional, and this has been achieved through liberal use of templates.&lt;/p>
+&lt;pre>&lt;code class="language-cpp">template &amp;lt;typename REAL, unsigned int DIM&amp;gt;
+class PointCloud {
+&lt;/code>&lt;/pre>
+&lt;p>The top of our class says that we&amp;rsquo;re allowing you to choose your type to represent the data (called REAL) and the dimension of the data set, which can be anything you like. As mentioned previously, Eigen provides general dimensional hyperplane routines which makes our lives relatively simple.&lt;/p>
+&lt;p>Unfortunately as you may have realised from the above algorithm the performance is largely dependent on how quickly we can find all the points within a given radius. This is resolved using a &lt;a href="https://en.wikipedia.org/wiki/K-d_tree">KD tree&lt;/a>, which essentially organises the points into a graph structure for fast searching. I&amp;rsquo;m not going to discuss the specifics of KD tree construction and querying - there are plenty of other links to help you with this. I chose to make use of &lt;a href="https://github.com/jlblancoc/nanoflann">nanoflann&lt;/a> from Jose Luis Blanco-Claraco as it is a header only library making it easier to incorporate into the project build.&lt;/p>
+&lt;p>One issue which may seem non-obvious is that I have added the KD tree index object as a member of the PointCloud class:&lt;/p>
+&lt;pre>&lt;code class="language-cpp"> /// A KDTreeIndex type
+typedef nanoflann::KDTreeSingleIndexAdaptor&amp;lt;
+nanoflann::L2_Simple_Adaptor&amp;lt;REAL, PointCloud&amp;lt;REAL,DIM&amp;gt; &amp;gt; ,
+PointCloud&amp;lt;REAL,DIM&amp;gt;,
+DIM&amp;gt; KDTreeIndex;
+/// A KDTree structure
+KDTreeIndex m_index;
+&lt;/code>&lt;/pre>
+&lt;p>This means that the KDTreeIndex is incorporated into the PointCloud class, although as you can see from the typedef above the PointCloud is a template parameter for the index itself. This is because the class which is passed to nanoflann needs to have a set of functions (all with the prefix kdtree_) which will be called during kd tree construction and querying, for example:&lt;/p>
+&lt;pre>&lt;code class="language-cpp"> /// Returns the dim'th component of the idx'th point in the class (random point access)
+inline REAL kdtree_get_pt(const size_t idx, int dim) const {
+return m_data[idx][dim];
+}
+&lt;/code>&lt;/pre>
+&lt;p>The way this works is that we pass &lt;strong>this&lt;/strong> object when we construct the KDTreeIndex, e.g.&lt;/p>
+&lt;pre>&lt;code class="language-cpp">/**
+* Build an empty point cloud with an empty KDTree.
+*/
+template &amp;lt;typename REAL, unsigned int DIM&amp;gt;
+PointCloud&amp;lt;REAL,DIM&amp;gt;::PointCloud()
+: m_index(DIM, *this, nanoflann::KDTreeSingleIndexAdaptorParams(10)) {
+}
+&lt;/code>&lt;/pre>
+&lt;p>It is an interesting and rather twisting compositional arrangement, but it allows us to make sure that all the elements relevent to the point cloud in one convenient place.&lt;/p>
+&lt;p>Another interesting trick of nanoflann compatibility is the fact that I&amp;rsquo;m storing my points in Eigen, while nanoflann needs to compute distances using data stored in pointers to REAL&amp;rsquo;s. Rather than constructing a new Eigen point and copy data across, we can make use of the &lt;a href="http://eigen.tuxfamily.org/dox/classEigen_1_1Map.html">Eigen::Map&lt;/a> which will just make a vector out of the existing memory rather than copying it across, hopefully saving us a couple of clocks:&lt;/p>
+&lt;pre>&lt;code class="language-cpp"> /// Returns the distance between the vector &amp;quot;p1[0:size-1]&amp;quot; and the data point with index &amp;quot;idx_p2&amp;quot; stored in the class:
+inline REAL kdtree_distance(const REAL *p1_data, const size_t idx_p2, size_t size) const {
+Eigen::Map&amp;lt;const PointType&amp;gt; p1_map(p1_data,DIM);
+return (m_data[idx_p2] - p1_map).norm();
+}
+&lt;/code>&lt;/pre>
+&lt;h3 id="conclusions">Conclusions&lt;/h3>
+&lt;p>Currently the examples of using this code are pretty spartan as it is going to be incorporate into a significantly larger project. However, there are a couple of important things to note about this implementation:&lt;/p>
+&lt;ol>
+&lt;li>The choice of radius has a significant impact on the projection. In previous implementations I&amp;rsquo;ve geometrically scaled the radius until some points are found and then scaled it back after the first projection. However, this may have continuity implications. I&amp;rsquo;ve also used a precomputed smooth scalar field of radii to use for this projection to ensure that you have a constant number of neighbours - something I&amp;rsquo;ll be experimenting with in the future.&lt;/li>
+&lt;li>There are a couple of implementation issues I still need to resolve, such as the choice of weight function and how to handle the situation when there are no neighbours in the specificed radius (see above). There is also the relationship between the radius and the cell size of the KD Tree which needs to be resolved. And some nice 3D examples!&lt;/li>
+&lt;li>The process of using MLS projection to smooth input data (called &lt;em>mollification&lt;/em>) was not discussed, but will hopefully be appended to this post at some point. The process is pretty simple: project each point in the existing set onto other points in the same set. This has some interesting performance considerations to doing it correctly (for example, the KD Tree will need to be rebuilt in each iteration).&lt;/li>
+&lt;li>Parallelism! There are a couple of things which could be done in parallel, especially if we&amp;rsquo;re doing mollification.&lt;/li>
+&lt;/ol>
+&lt;h3 id="downloads">Downloads&lt;/h3>
+&lt;p>The source code is hosted on &lt;a href="https://github.com/rsouthern/Examples">GitHub&lt;/a>. Clone it from the repository using the following command from your console:&lt;/p>
+&lt;pre>&lt;code class="language-shell">git clone https://github.com/rsouthern/Examples
+&lt;/code>&lt;/pre></description></item><item><title>Recursive n-dimensional scalar field interpolation</title><link>https://rsouthern.github.io/post/scalarfield/</link><pubDate>Sat, 19 Sep 2015 00:00:00 +0000</pubDate><guid>https://rsouthern.github.io/post/scalarfield/</guid><description>&lt;h3 id="background">Background&lt;/h3>
+&lt;p>Lets say you have a smooth scalar function of any number of variables \(f:\mathbb{R}^n\mapsto\mathbb{R}^1\). Let&amp;rsquo;s assume that the function is computationally expensive to evaluate, but you need to do this at run-time, possibly a lot. Let&amp;rsquo;s also assume that you can define the maximum and minimum range of values which you are interested in. Let&amp;rsquo;s also assume that the function is smooth, and you&amp;rsquo;re tolerant of (or even prefer) the results to be smoothed over.&lt;/p>
+&lt;p>One possible solution is to sample values of the function over a regular grid, and perform some sort of interpolation between the values. So we&amp;rsquo;ll define a different function
+\(g:\mathbb{R}^n\mapsto\mathbb{R}^1,,g\approx f\). Depending on the desired smoothness of the approximation different interpolation functions are feasible, but not all of these generalise to any dimension. One method which does, however, is the &lt;a href="https://en.wikipedia.org/wiki/Centripetal_Catmull%E2%80%93Rom_spline">Catmull-Rom Spline&lt;/a> (co-invented by the CG superhero &lt;a href="https://en.wikipedia.org/wiki/Edwin_Catmull">Ed Catmull&lt;/a>) which can be evaluated recursively on grid edges and exhibits \(C^2\) continuity.&lt;/p>
+&lt;p>I&amp;rsquo;ll explain how this works with the help of this figure, representing a 2D scalar field:&lt;/p>
+&lt;center>&lt;img src="catmullrom_interpolation.svg"/>&lt;/center>
+In this case, we're looking at a function $f:\mathbb{R}^2\mapsto\mathbb{R}^1$ with the value returned by this function visualised as a height above the $(x,y)$ grid in the above image. We assume that the red points are the pre-computed values for $f$ at the corners of the grid cells. Once the cell in which the value to be calculated is identified, 4 Catmull-Rom interpolations are performed in the $y$ direction, to find the green points. One further Catmull-Rom interpolation is needed between these points to compute the final interpolated value (in blue). Note that the number of curves that need to interpolated in each dimension is multiplied by 4 in each step (so on a 3D grid, the first step requires 16 interpolations in the $z$, then 4 in the $y$ and 1 in the $x$). You can see that this process is ripe for recursion. It is also ripe for parallel computation, but that is another story...
+&lt;h3 id="applications">Applications&lt;/h3>
+&lt;p>You might be wondering when you might you want to use an application like this? I developed it in the context of a sparse, high dimensional &lt;a href="https://en.wikipedia.org/wiki/Moving_least_squares">Moving Least Squares&lt;/a> projection: if you are projecting onto a point cloud that is irregular, you need an adaptive, variable radius function in order to ensure that you have sufficient local points on which to project. As it&amp;rsquo;s expensive to compute local neighbours at run time (especially in, say, 66 dimensions) it&amp;rsquo;s probably a good idea to define an approximating smooth function which, given any point in space, returns a radius that will probably contain a desired number of point samples.&lt;/p>
+&lt;h3 id="implementation">Implementation&lt;/h3>
+&lt;p>There are a number of features used in this implementation, which I&amp;rsquo;m going to unpick from the implementation and discuss separately.&lt;/p>
+&lt;h4 id="passing-around-functions">Passing around functions&lt;/h4>
+&lt;p>Fundamental to this process is the ability to evaluate a generic function at a point. It would be very convenient for us to be able to pass said function around as a generic function pointer. For a simple generic function signature, I&amp;rsquo;ll use a function that accepts an array of &lt;em>double&lt;/em>s, and returns a &lt;em>double&lt;/em>. This can be stated using the &lt;a href="http://en.cppreference.com/w/cpp/utility/functional/function">std::function&lt;/a> method:&lt;/p>
+&lt;pre>&lt;code class="language-cpp">std::function&amp;lt;double (double*)&amp;gt; _func;
+&lt;/code>&lt;/pre>
+&lt;p>Note that the type notation is C notation for a function that accepts a pointer to a double, and returns a double. This makes &lt;em>_func&lt;/em> a generic function that can be passed as a parameter - particularly convenient if we&amp;rsquo;re allowing the use of arbitrary input functions. Of course, the return type and array size could be specified as template parameters, but for interaction with existing functions (e.g. libnoise) I&amp;rsquo;ve kept it simple.&lt;/p>
+&lt;h4 id="templates-and-c11">Templates and C++11&lt;/h4>
+&lt;p>I do, however, use templates for the actual ScalarField class. In an early implementation of this structure I just used dynamic arrays of doubles to store the data - but this gives us the overhead of dynamic allocation and deallocation, along with the risks associated with non-contiguous memory. &lt;em>C++11&lt;/em> introduces the &lt;em>std::array&lt;/em>, which is essentially an old skool &lt;em>C&lt;/em> static array, but with all the handy goodness of the STL.&lt;/p>
+&lt;p>This is from the top of the ScalarField class:&lt;/p>
+&lt;pre>&lt;code class="language-cpp">template &amp;lt;uint DIM&amp;gt;
+class ScalarField {
+public:
+/// Unsigned int array
+typedef std::array&amp;lt;uint, DIM&amp;gt; uintArray;
+/// Double array
+typedef std::array&amp;lt;double, DIM&amp;gt; doubleArray;
+&lt;/code>&lt;/pre>
+&lt;p>The template parameter is evaluated at &lt;em>compile time&lt;/em>, generating a template class for the desired dimension. Whenever I create an object of type &lt;em>doubleArray&lt;/em> in the code, this is done statically.&lt;/p>
+&lt;p>Note that I could have given a template parameter for a &lt;em>real type&lt;/em> and an &lt;em>integer type&lt;/em>, but that will add some unnecessary complexity for now.&lt;/p>
+&lt;h4 id="recursive-algorithm">Recursive Algorithm&lt;/h4>
+&lt;p>The core of the algorithm is the construction of the grid and the recursive evaluation of the query point. Fortunately these are reasonably similar. Lets have a look at the init routine:&lt;/p>
+&lt;pre>&lt;code class="language-cpp">/**
+* @brief ScalarField::initialise Inits the scalar field
+* @param _func A boost-ified function declaration which returns the scalar value
+* @param _minValue The minimum values of our given field.
+* @param _maxValue The maximum values of our given field.
+* @param _resolution The resolution of the field in each dimension.
+*/
+template&amp;lt;uint DIM&amp;gt;
+void ScalarField&amp;lt;DIM&amp;gt;::init(std::function&amp;lt;double (double*)&amp;gt; _func,
+const doubleArray &amp;amp;_minValue,
+const doubleArray &amp;amp;_maxValue,
+sconst uintArray&amp;amp; _resolution) {
+// Check we've not been here before already
+if (m_isInit) cleanup();
+// Precompute the partition size in each case
+// Now we can allocate some memory for our data
+// Now for each value in the field we can use the provided function to derive the scalar value
+// this is done recursively (could easily be done in parallel
+doubleArray pos; uintArray idx;
+initRecurse(_func, 0u, idx, pos);
+// Set this to initialised
+m_isInit = true;
+}
+&lt;/code>&lt;/pre>
+&lt;p>Not very much excitement there: we set up the memory and ready ourselves for running the recursive function. The initRecurse function is obviously where the action is - so I&amp;rsquo;ll break it down into stages:&lt;/p>
+&lt;pre>&lt;code class="language-cpp">/**
+* @brief ScalarField::initRecurse Recursively initialise the scalar field along each dimension.
+* @param _func The boostified function to execute to determine the scalar value
+* @param dim The current dimension (start this at 0)
+* @param idx The current index to evaluate (empty when you start)
+* @param pos The position to evaluate (empty when you start)
+*/
+template&amp;lt;uint DIM&amp;gt;
+void ScalarField&amp;lt;DIM&amp;gt;::initRecurse(std::function&amp;lt;double (double*)&amp;gt; _func,
+const uint &amp;amp;dim,
+uintArray &amp;amp;idx,
+doubleArray &amp;amp;pos) {
+&lt;/code>&lt;/pre>
+&lt;p>The prototype reveals a lot about the functionality of the function. The first parameter is the function that we want to call at the grid points. The second parameter is the current dimension. You&amp;rsquo;ll notice from the code above that this starts at &lt;em>0&lt;/em> - each time the function is called, the dimension number will tick up until it gets to the actual dimension, which is our recursion termination criteria. Index and the position values fill up after the recursion unrolls.&lt;/p>
+&lt;pre>&lt;code class="language-cpp"> // At the end of the recursion chain we can calculate the value using the function
+if (dim &amp;gt;= DIM) {
+// First determine the index in the data
+...
+// Now set the value of the data in the right place to the result of the function
+m_data[dataIdx] = _func(&amp;amp;pos[0]);
+return;
+}
+&lt;/code>&lt;/pre>
+&lt;p>At the end of the recursion chain, we evaluate the given function at the position. This isn&amp;rsquo;t straightforward, as I&amp;rsquo;ve stored all the data in a big flat 1D array. However I&amp;rsquo;ve removed the details for simplicity.&lt;/p>
+&lt;p>If the function didn&amp;rsquo;t return, we know that we&amp;rsquo;re not at the end of the chain so we recursively evaluate across each grid dimension:&lt;/p>
+&lt;pre>&lt;code class="language-cpp"> // If we didn't get to the end of the chain, we run another iteration
+for (i = 0 ; i &amp;lt; m_resolution[dim]; ++i) {
+idx[dim] = i;
+pos[dim] = m_minValue[dim] + i * m_partSize[dim];
+initRecurse(_func, dim+1, idx, pos);
+}
+&lt;/code>&lt;/pre>
+&lt;p>In this way, each node in each dimension is initialised with our input function.&lt;/p>
+&lt;p>The evaluation function is a bit more tricky:&lt;/p>
+&lt;pre>&lt;code class="language-cpp">/**
+* @brief ScalarField::eval Evaluate the scalar value at the specified point.
+* @param pt The position at which to evaluate the scalar field
+* @return
+*/
+template&amp;lt;uint DIM&amp;gt;
+double ScalarField&amp;lt;DIM&amp;gt;::eval(const doubleArray&amp;amp; pt) const {
+if (!m_isInit) return 0.0;
+// Determine the index of the bottom corner of the evaluation grid (if outside, extrapolation
+// may be used, so it's capped at the bounds of the grid)
+...
+// Deduce the index of the points from the min, max grid values and total resolution
+...
+// Evaluate the position recursively over all dimensions
+double ret_val = evalRecurse(0, idx, currentIdx, x);
+// Clear memory and return
+return ret_val;
+}
+&lt;/code>&lt;/pre>
+&lt;p>This is largely the same as the &lt;em>init&lt;/em> function above, except that you will need to calculate the bottom corner index of the grid cell in which the query point lives (which is messy, and hidden away).&lt;/p>
+&lt;p>The header for &lt;em>evalRecurse&lt;/em> is more or less the same as &lt;em>initRecurse&lt;/em> so I won&amp;rsquo;t repeat myself. The big difference, of course, is that this function actually returns a value. Here&amp;rsquo;s the termination condition:&lt;/p>
+&lt;pre>&lt;code class="language-cpp"> // The termination condition - just return the scalar value at the specified position
+if (dim &amp;gt;= DIM) {
+// First determine the index in the data
+...
+// Just return the data value at this position!
+return m_data[dataIdx];
+}
+&lt;/code>&lt;/pre>
+&lt;p>This just returns the value at the grid point - this makes more sense in the context of the general condition below:&lt;/p>
+&lt;pre>&lt;code class="language-cpp"> else {
+// Evaluate the catmull rom spline recursively by combining the current indices
+// along all dimensions
+double v0, v1, v2, v3;
+currentIdx[dim] = idx[dim] + 0; v0 = evalRecurse(dim+1, idx, currentIdx, x);
+currentIdx[dim] = idx[dim] + 1; v1 = evalRecurse(dim+1, idx, currentIdx, x);
+currentIdx[dim] = idx[dim] + 2; v2 = evalRecurse(dim+1, idx, currentIdx, x);
+currentIdx[dim] = idx[dim] + 3; v3 = evalRecurse(dim+1, idx, currentIdx, x);
+return catmullRomSpline(x[dim], v0, v1, v2, v3);
+}
+&lt;/code>&lt;/pre>
+&lt;p>So this function spawns 4 different &lt;em>evalRecurse&lt;/em>s for this thread, each one potentially spawning another 4 &lt;em>ad nausium&lt;/em>. The results of each thread re interpolated using our magical &lt;em>catmullRomSpline&lt;/em> function (which is really easy - check the code).&lt;/p>
+&lt;h3 id="conclusions">Conclusions&lt;/h3>
+&lt;p>This is a nice example of an bit of code that is useful for teaching and research: there are a couple of nice &lt;em>C++11&lt;/em>, &lt;em>C++&lt;/em> and &lt;em>C&lt;/em> principles at play which greatly simplify the implementation and improve performance. The research behind it pretty nifty and broadly applicable (I would think).&lt;/p>
+&lt;p>You may have observed that you could use this approach for general dimensional mapping, i.e. $f:\mathbb{R}^n\mapsto\mathbb{R}^m$, assuming that you create &lt;em>m&lt;/em> different ScalarFields. Vector Field intepolation might be more difficult as they will require some recombination function (e.g. normalisation), but not impossible.&lt;/p>
+&lt;p>Parallelism is an obviously missing thing here: in very high dimensional data sets this could prove to be particularly useful - it is essentially a &lt;em>scan-reduce&lt;/em> function. Send me an email if you want this and I can check this out.&lt;/p>
+&lt;h3 id="downloads">Downloads&lt;/h3>
+&lt;p>The source code is hosted on &lt;a href="https://github.com/rsouthern/Examples">GitHub&lt;/a>. Clone it from the repository using the following command from your console:&lt;/p>
+&lt;pre>&lt;code class="language-shell">git clone https://github.com/rsouthern/Examples
+&lt;/code>&lt;/pre></description></item></channel></rss>

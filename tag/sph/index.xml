@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes"?><rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom"><channel><title>sph | Richard's Blog</title><link>https://rsouthern.github.io/tag/sph/</link><atom:link href="https://rsouthern.github.io/tag/sph/index.xml" rel="self" type="application/rss+xml"/><description>sph</description><generator>Wowchemy (https://wowchemy.com)</generator><language>en-uk</language><lastBuildDate>Thu, 08 Oct 2020 00:00:00 +0000</lastBuildDate><image><url>https://rsouthern.github.io/images/icon_hu0365f2187e15210a9118469a64220edc_142871_512x512_fill_lanczos_center_2.png</url><title>sph</title><link>https://rsouthern.github.io/tag/sph/</link></image><item><title>SPH Sampling and its applications in Computer Graphics</title><link>https://rsouthern.github.io/talk/sphsampling/</link><pubDate>Thu, 08 Oct 2020 00:00:00 +0000</pubDate><guid>https://rsouthern.github.io/talk/sphsampling/</guid><description>&lt;p>A talk (now a bit old) talking about our work on using Smoothed Particle Hydrodynamics for Blue Noise sampling. I&amp;rsquo;ll talk about the advantages and disadvantages of using this method, along with applications and future research directions. There is also an introduction to SPH in there too.&lt;/p>
+&lt;iframe width=100% height="400" src="https://www.youtube.com/embed/q3F5APTf2E8" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen>&lt;/iframe>
+&lt;p>The slides for this talk can be viewed &lt;a href="https://docs.google.com/presentation/d/1uaSFeXfCbWLNmTKron4Evh0l-qwoD2ndz0fWhM-sdDU/edit?usp=sharing">here&lt;/a>.&lt;/p></description></item><item><title>Energy-based dissolution simulation using SPH sampling</title><link>https://rsouthern.github.io/publication/dissolution2/</link><pubDate>Fri, 12 Jan 2018 00:00:00 +0000</pubDate><guid>https://rsouthern.github.io/publication/dissolution2/</guid><description>&lt;h4 id="paper">Paper&lt;/h4>
+&lt;p>A preprint of the paper is available &lt;a href="http://eprints.bournemouth.ac.uk/30229/">[here]&lt;/a> (under embargo until 12/01/2019).&lt;/p>
+&lt;h4 id="media">Media&lt;/h4>
+&lt;center>
+&lt;iframe width="560" height="315" src="https://www.youtube.com/embed/X9SmiLtsaxg?ecver=1" frameborder="0" allow="autoplay; encrypted-media" allowfullscreen>&lt;/iframe>
+&lt;/center></description></item><item><title>Blue Noise Sampling using an SPH-based Method</title><link>https://rsouthern.github.io/publication/sphsampling/</link><pubDate>Sun, 08 Nov 2015 00:00:00 +0000</pubDate><guid>https://rsouthern.github.io/publication/sphsampling/</guid><description>&lt;h4 id="media">Media&lt;/h4>
+&lt;center>
+&lt;iframe src="//www.slideshare.net/slideshow/embed_code/key/fczVYj0kQ9dEFC" width="595" height="485" frameborder="0" marginwidth="0" marginheight="0" scrolling="no" style="border:1px solid #CCC; border-width:1px; margin-bottom:5px; max-width: 100%;" allowfullscreen> &lt;/iframe> &lt;div style="margin-bottom:5px"> &lt;strong> &lt;a href="//www.slideshare.net/RichardSouthern2/blue-noise-sampling-using-an-sphbased-method" title="Blue Noise Sampling using an SPH-based Method" target="_blank">Blue Noise Sampling using an SPH-based Method&lt;/a> &lt;/strong> from &lt;strong>&lt;a href="//www.slideshare.net/RichardSouthern2" target="_blank">Richard Southern&lt;/a>&lt;/strong> &lt;/div>
+&lt;/center>
+&lt;h4 id="source-code">Source Code&lt;/h4>
+&lt;table>
+&lt;tr>
+&lt;td width=50%>
+&lt;img align=left width=100% src="multiclass_icon.png"/>
+An implementation of multiclass sampling using our SPH sampling method. Implemented in C++ in Visual Studio. Windows binary included.
+&lt;a href="../../rsouthern/Downloads/SPH_sampling_multiclass_v1.zip">[Download]&lt;/a>
+&lt;/td>
+&lt;td width=50%>
+&lt;img align=left width=100% src="surface_icon.png"/>
+An implementation of surface sampling using our SPH sampling method. Implemented in C++ in Visual Studio. Windows binary included.
+&lt;a href="../../rsouthern/Downloads/SPH_sampling_surface_v1.zip">[Download]&lt;/a>
+&lt;/td>
+&lt;/tr>
+&lt;/table></description></item><item><title>A Particle-based Dissolution Model using Chemical Collision Energy</title><link>https://rsouthern.github.io/publication/dissolution/</link><pubDate>Wed, 11 Mar 2015 00:00:00 +0000</pubDate><guid>https://rsouthern.github.io/publication/dissolution/</guid><description>&lt;p>&lt;em>Winner of NVIDIA Best Paper and Best Student Paper awards!&lt;/em>&lt;/p>
+&lt;h4 id="paper">Paper&lt;/h4>
+&lt;p>A preprint of the paper is available &lt;a href="http://eprints.bournemouth.ac.uk/22721/">[here]&lt;/a>.&lt;/p>
+&lt;h4 id="media">Media&lt;/h4>
+&lt;center>
+&lt;iframe width="480" height="320" src="https://www.youtube.com/embed/R7bqM_Tonu0" frameborder="0" allowfullscreen>&lt;/iframe>
+&lt;/center></description></item></channel></rss>

@@ -1,0 +1,49 @@
+<html>
+
+<head>
+</head>
+
+<body>
+
+   <!-- Includes for data loading and visualisation-->
+   <script src="https://d3js.org/d3.v6.js"></script>
+   <script src="https://gist.github.com/emeeks/3361332/raw/61cf57523fe8cf314333e5f60cc266351fec2017/d3.layout.cloud.js"></script>
+   <!-- Includes to input data from google docs / sheets-->
+   <script src="https://www.gstatic.com/charts/loader.js"></script>
+
+   <script src="nodes.js"></script>
+   <script src="wordcloud.js"></script>
+   <script src="keywordcount.js"></script>
+
+   <form name="courseForm">
+      <input type="radio" name="courseRad" id="courseRad1" value="BACATA">
+      <label for="courseRad1">BACATA</label>
+      <input type="radio" name="courseRad" id="courseRad2" value="BACAAD">
+      <label for="courseRad2">BACAAD</label>
+      <input type="radio" name="courseRad" id="courseRad3" value="BAVE">
+      <label for="courseRad3">BAVE</label>
+   </form>
+
+   <script type="text/javascript">
+      var rad = document.courseForm.courseRad;
+      var prev = null;
+      for (var i = 0; i < rad.length; i++) {
+         rad[i].addEventListener('change', function () {
+            (prev) ? console.log(prev.value) : null;
+            if (this !== prev) {
+               prev = this;               
+            }
+            drawUnits(this.value, "unitsDiv");
+            //drawWordCloud(this.value, "cloudDiv");
+            drawKeywordCount(this.value, "cloudDiv");
+            //console.log(this.value)
+         });
+      } 
+   </script>
+   <h1>Units</h1>
+   <div id="unitsDiv" position="absolute" display="inlineblock" width="100%"></div>
+   <h1>Keywords</h1>
+   <div id="cloudDiv" position="absolute" display="inlineblock" width="100%"></div>
+</body>
+
+</html>

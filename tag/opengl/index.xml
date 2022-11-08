@@ -1,0 +1,378 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes"?><rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom"><channel><title>opengl | Richard's Blog</title><link>https://rsouthern.github.io/tag/opengl/</link><atom:link href="https://rsouthern.github.io/tag/opengl/index.xml" rel="self" type="application/rss+xml"/><description>opengl</description><generator>Wowchemy (https://wowchemy.com)</generator><language>en-uk</language><lastBuildDate>Fri, 01 Jun 2018 00:00:00 +0000</lastBuildDate><image><url>https://rsouthern.github.io/images/icon_hu0365f2187e15210a9118469a64220edc_142871_512x512_fill_lanczos_center_2.png</url><title>opengl</title><link>https://rsouthern.github.io/tag/opengl/</link></image><item><title>Principal Curvature Aligned Anisotropic Shading</title><link>https://rsouthern.github.io/post/curv/</link><pubDate>Fri, 01 Jun 2018 00:00:00 +0000</pubDate><guid>https://rsouthern.github.io/post/curv/</guid><description>&lt;p>In this post I will discuss the math and code behind a method to generate the automated orientation of a shading vector field using the intrinsic geometric properties of the object.&lt;/p>
+&lt;h3 id="background">Background&lt;/h3>
+&lt;p>Anisotropic reflectance models are handy for modeling shading behaviours at the microfacet level which conform with some sort of oriented field, for example, brushed metal:
+&lt;img src="Brushed_Aluminium.jpg" alt="Brushed aluminum">&lt;/p>
+&lt;p>The &lt;a href="http://radsite.lbl.gov/radiance/papers/sg92/paper.html">Ward anisotropic specular reflectance model&lt;/a> can (after some simplification, for which I unfortunately do not have a clear reference) be stated as:
+\begin{equation}
+\frac{(\mathbf{l}\cdot \mathbf{n})}{(\mathbf{v}\cdot \mathbf{n})} \exp \left( -2 \frac{ \left(\frac{\mathbf{h}\cdot\mathbf{x}}{\alpha_x} \right)^2 + \left(\frac{\mathbf{h}\cdot \mathbf{y}}{\alpha_y} \right)^2}{(1+\mathbf{h} \cdot \mathbf{n})}\right),
+\end{equation}
+where \(\mathbf{n}\) is the surface normal at a point, $\mathbf{l}$ is the vector from the point to the light source, \(\mathbf{v}\) is the vector from the point to the eye and \(\mathbf{h}\) is the half vector defined as \(\mathbf{h}=(\mathbf{l}+\mathbf{v})/\|\cdot \| \). The important anisotropic bits are the vectors \(\mathbf{x}, \mathbf{y}\), which define the (orthogonal) directions of anisotropy, and \(\alpha_x\) and \(\alpha_y\) define the standard deviation of the surface slope in the \(\mathbf{x}\) and \(\mathbf{y}\) directions respectively. They scale the &amp;ldquo;amount&amp;rdquo; of anisotropy in each of the directions. Note that \(\mathbf{x}\), \(\mathbf{y}\), and \(\mathbf{n}\), should define an orthogonal coordinate frame.&lt;/p>
+&lt;p>This might be implemented in a fragment shader as something similar to this:&lt;/p>
+&lt;pre>&lt;code class="language-cpp"> vec3 halfwayVector = normalize(lightDirection + viewDirection);
+vec3 normalDirection = normalize(FragNormal);
+vec3 tangentDirection = normalize(FragK1);
+vec3 binormalDirection = normalize(FragK2); // this also works: cross(normalDirection, tangentDirection);
+float dotLN = dot(lightDirection, normalDirection);
+vec3 diffuseReflection = attenuation * Light.Ld * Material.Kd * max(0.0, dotLN);
+float dotHN = dot(halfwayVector, normalDirection);
+float dotVN = dot(viewDirection, normalDirection);
+float dotHTAlphaX = dot(halfwayVector, tangentDirection) / alphaX;
+float dotHBAlphaY = dot(halfwayVector, binormalDirection) / alphaY;
+vec3 specularReflection;
+if (dotLN &amp;lt; 0.0) // light source on the wrong side?
+{specularReflection = vec3(0.0);} else {
+// light source on the right side
+specularReflection = attenuation * Material.Ks
+* max(0.0,(dotLN/dotVN))
+* exp(-2.0 * (dotHTAlphaX * dotHTAlphaX + dotHBAlphaY * dotHBAlphaY) / (1.0 + dotHN));
+}
+fragColor = vec4(specularReflection + diffuseReflection, 1.0);
+&lt;/code>&lt;/pre>
+&lt;p>In order for us to generate good quality anisotropic fields using this formulation we see that we would have to provide per-pixel values for \(\mathbf{x}\), \(\mathbf{y}\), \(\alpha_x\) and \(\alpha_y\) (note that as \(\mathbf{y}\) is orthogonal to \(\mathbf{x}\) and \(\mathbf{n}\) so theoretically this can be deduced). Typically in a shader the vector field would be inferred by interpolation from a texture map containing direction vectors. As this involves a lot of effort, I looked into something a little more automated.&lt;/p>
+&lt;h3 id="lines-of-principal-curvature">Lines of Principal Curvature&lt;/h3>
+&lt;p>Most interesting surfaces are curved in some way. You&amp;rsquo;re probably already familiar with the concept of a &lt;em>normal&lt;/em> to a surface: if we zoom in enough to a surface (or manifold) it will look pretty flat. The vector defining the orientation of this plane is called a normal at a point on the surface.&lt;/p>
+&lt;p>Interestingly there are two other vectors that are defined in that tangent plane - one defines the direction and magnitude in which the rate the normal changes across the surface is at a &lt;em>maximum&lt;/em>, and other the &lt;em>least&lt;/em> - these are called the maximum and minimum principal curvature directions respectively, and are often symbolized by \(\mathbf{k}_1\) and \(\mathbf{k}_2\) respectively.&lt;/p>
+&lt;center>&lt;img width=50% src="https://upload.wikimedia.org/wikipedia/commons/e/eb/Minimal_surface_curvature_planes-en.svg"/>&lt;/center>
+The &lt;a href="https://en.wikipedia.org/wiki/Principal_curvature">figure&lt;/a> above demonstrates the principal curvature directions for a saddle point, which lie in the orthogonal bisecting planes which intersect at the point where the curvature is measured. Interestingly a geometrically perfect saddle point and sphere would have $ \\|\mathbf{k}_1\\| = \\|\mathbf{k}_2\\| $.
+&lt;p>These vectors are defined at all points over a smooth surface, and seem like a good choice for an intrinsic surface property suitable for defining our shading orientation, i.e. let \(\mathbf{k}_1 = \alpha_x \mathbf{x}\) and \(\mathbf{k}_2 = \alpha_y \mathbf{y}\). However there is a snag - the flow of the principal curvature direction is undefined, e.g. \(\mathbf{k}_1, \mathbf{k}_2\) and \(-\mathbf{k}_1, -\mathbf{k}_2\) are both equally valid principle curvature directions at any point as the frame can be arbitrarily flipped around (which we&amp;rsquo;ll see later is a bit of a problem).&lt;/p>
+&lt;h3 id="computing-the-principal-curvature-directions">Computing the Principal Curvature Directions&lt;/h3>
+&lt;p>There are a number of methods to compute principal curvature directions over a triangle mesh. I&amp;rsquo;m not going to dwell on it here. The library I used for this is &lt;a href="https://github.com/libigl/libigl">libigl&lt;/a> which provides a simple header only library based on the math library &lt;a href="http://eigen.tuxfamily.org">Eigen&lt;/a>. The full explanation of how libigl deduces the principle curvature directions is described &lt;a href="http://libigl.github.io/libigl/tutorial/tutorial.html#curvaturedirections">here&lt;/a>.&lt;/p>
+&lt;p>The code for loading up a mesh, deducing vertex normals and extracting the principal curvature directions is below:&lt;/p>
+&lt;pre>&lt;code class="language-cpp"> // Read a mesh from a file into igl
+MatrixXfr V;
+MatrixXir F;
+igl::read_triangle_mesh(filename, V, F);
+// Determine the smooth corner normals
+MatrixXfr N;
+igl::per_vertex_normals(V,F,N);
+// Compute the principle curvature directions and magnitude using quadric fitting
+MatrixXfr K1,K2;
+Eigen::VectorXf KV1,KV2;
+igl::principal_curvature(V,F,K1,K2,KV1,KV2);
+&lt;/code>&lt;/pre>
+&lt;p>Note that the KV1 and KV2 hold the magnitude of each vector (K1 and K2 are normalized). This seemed a bit wasteful so I recombined these into a single vertex structure which contained the position, normal and scaled \(\mathbf{k}_1\) and \(\mathbf{k}_2\):&lt;/p>
+&lt;pre>&lt;code class="language-cpp"> MatrixXfr KV1_mat(K1.rows(), K1.cols()); KV1_mat &amp;lt;&amp;lt; KV1,KV1,KV1;
+MatrixXfr KV2_mat(K2.rows(), K2.cols()); KV2_mat &amp;lt;&amp;lt; KV2,KV2,KV2;
+K1.array() = KV1_mat.array() * K1.array();
+K2.array() = KV2_mat.array() * K2.array();
+// Now concatenate our per vertex data into a big chunk of data in Eigen
+MatrixXfr Vertices(V.rows(), V.cols() + N.cols() + K1.cols() + K2.cols());
+Vertices &amp;lt;&amp;lt; V, N, K1, K2;
+&lt;/code>&lt;/pre>
+&lt;p>Be wary as what these libraries gain in ease of use they sacrifice in terms of performance, so the application takes quite a while on startup to compute these matrices and vectors.&lt;/p>
+&lt;p>The curvature vectors generated using this process can be visualised as follows:
+&lt;img src="curvatureshading_wrong_vectors.png" alt="Unoriented curvature vectors">
+In this case the coordinate frame at each point is defined by the normal (in red), \(\mathbf{k}_1\), the maximum curvature direction and magnitude (in blue) and \(\mathbf{k}_2\), the minimum curvature direction (in green).&lt;/p>
+&lt;h3 id="early-results">Early results&lt;/h3>
+&lt;p>This all sounds like a great idea, but when we render these vectors, we get something a bit unexpected:
+&lt;img src="curvatureshading_wrong.png" alt="Unoriented curvature shading">
+Actually, these results are entirely predictable. For a first implementation, the curvatures are defined as vertex properties, which are simply passed on to the fragment shader to shade. This means that the curvatures are being &lt;em>intepolated across the face per fragment&lt;/em>.&lt;/p>
+&lt;p>Looking at the curvature directions from the previous section, we can see that the curvature vectors do not define a consistent flow over the surface. This is because the curvature is deduced independently at each vertex, and perfectly valid in either direction of flow, e.g. I could rotate by 180 degrees about the normal and the principle curvature directions are the same.&lt;/p>
+&lt;p>To the Ward shading algorithm it doesn&amp;rsquo;t matter, as \(\mathbf{x}\) and \(\mathbf{y}\) are effectively squared so the sign will disappear. However, during rasterization the vectors will be interpolated across the face - the curvature vectors at the corners of a face may be pointing in opposite directions, which means that the interpolated vector will sweep between them.&lt;/p>
+&lt;p>One option is to re-orient all of the curvature vectors as a preprocess. The only method I&amp;rsquo;m aware of to consistently orient the curvature field is based on the method described in &lt;a href="https://dl.acm.org/citation.cfm?id=882296">Anisotropic Polygonal Remeshing&lt;/a> by Alliez et al. (also available &lt;a href="ftp://ftp-sop.inria.fr/prisme/alliez/anisotropic.pdf">[here]&lt;/a>) but this involves smoothing the tensor field, identifying umbilics and iteratively growing streamlines across the surface, which seemed somewhat tedious.&lt;/p>
+&lt;h3 id="curvature-direction-correction-on-the-gpu">Curvature Direction Correction on the GPU&lt;/h3>
+&lt;p>One of the convenient properties of the rendering process is that the triangle mesh (which may have shared vertex properties) is essentially broken up into independent triangles for the purposes of rendering as fragments. This effectively means that the vertex properties will be duplicated for each corner of each face coincident on a vertex.&lt;/p>
+&lt;p>Each face with the vertex properties to be interpolated are passed on to a Geometry Shader before the Fragment Shading stage of the pipeline. At this stage we are free to flip around \(\mathbf{k}_1\) and \(\mathbf{k}_2\) in order to ensure that all the curvature vectors at the corners are consistently oriented for this particular face. Note that which a neighbouring face might have these vectors oriented in a different direction, it doesn&amp;rsquo;t matter due to the properties of the Ward shading model.&lt;/p>
+&lt;pre>&lt;code class="language-cpp">void main() {
+// The first triangle vertex is just going to be copied across
+gl_Position = gl_in[0].gl_Position;
+FragPosition = GeoPosition[0];
+FragNormal = GeoNormal[0];
+FragK1 = GeoK1[0];
+FragK2 = GeoK2[0];
+EmitVertex();
+for(int i = 1; i &amp;lt; 3; ++i) {
+// Copy across the vertex position
+gl_Position = gl_in[i].gl_Position;
+FragPosition = GeoPosition[i];
+FragNormal = GeoNormal[i];
+// Determine whether the curvature is flipped, if so, correct the curvature normal
+FragK1 = ((dot(GeoK1[0], GeoK1[i]) &amp;lt; 0.0)?-1.0:1.0) * GeoK1[i];
+FragK2 = ((dot(GeoK2[0], GeoK2[i]) &amp;lt; 0.0)?-1.0:1.0) * GeoK2[i];
+// Emit the vertex of this primitive
+EmitVertex();
+}
+// Finish the triangle (strip)
+EndPrimitive();
+}
+&lt;/code>&lt;/pre>
+&lt;p>As you can see all this does is copy across the first vertex, and then copy across the other two triangle vertices, but first possibly flipping the curvature vectors if they are oriented differently to the first vertex. Not particularly high-brow stuff, but it gets the job done.&lt;/p>
+&lt;h3 id="final-results">Final Results&lt;/h3>
+&lt;p>Here is the bust model with three different scalings of the anisotropy aligned to the principle curvature directions:&lt;/p>
+&lt;table width=100%>
+&lt;tr>
+&lt;td> &lt;img width=100% src="bust01.png"/>&lt;/td>
+&lt;td>&lt;img width=100% src="bust02.png"/>&lt;/td>
+&lt;td>&lt;img width=100% src="bust03.png"/>&lt;/td>
+&lt;/tr>
+&lt;/table>
+&lt;p>While the face flipping problem has been fixed, the obvious issue with these results in that the curvature is not particularly smooth, mainly because of the resolution of the model but also because there has been not smoothing of the vector field. There are also issues relating to the placement of umbilics. These things could be improved by performing smoothing as described in &lt;a href="https://dl.acm.org/citation.cfm?id=882296">this method&lt;/a> or using a mesh with a higher resolution. In addition, a method which allows the user to &amp;ldquo;hide&amp;rdquo; umbilic points in geometric areas where they won&amp;rsquo;t be seen would be useful.&lt;/p>
+&lt;h3 id="downloads">Downloads&lt;/h3>
+&lt;p>The source code is hosted on &lt;a href="https://github.com/rsouthern/Examples">GitHub&lt;/a>. Clone it from the repository using the following command from your console:&lt;/p>
+&lt;pre>&lt;code class="language-shell">git clone https://github.com/rsouthern/Examples
+&lt;/code>&lt;/pre>
+&lt;p>This example is under rendering/curv.&lt;/p></description></item><item><title>Realtime Silhouette Rendering with Consistent Geometric Fins</title><link>https://rsouthern.github.io/post/fins/</link><pubDate>Tue, 01 May 2018 00:00:00 +0000</pubDate><guid>https://rsouthern.github.io/post/fins/</guid><description>&lt;h3 id="background">Background&lt;/h3>
+&lt;p>&lt;a href="https://en.wikipedia.org/wiki/Cel_shading">Cel shading&lt;/a> is a common shading technique designed to make 3D geometry look like it was hand painted in a traditional way. While it is fairly trivial to darken vertices on the silhouette, to truly emulate the effect of a hand drawn outline, the ink outline must extend &lt;em>outside&lt;/em> the silhouette of the object at a constant thickness for it to appear plausible. Games like &lt;a href="https://en.wikipedia.org/wiki/Borderlands_(video_game)">Borderlands&lt;/a> make liberal use of outline geometry to enhance the non-photorealistic style of the game.&lt;/p>
+&lt;p>My starting point was the &lt;a href="http://prideout.net/blog/?p=54">blog post&lt;/a> by Philip Rideout in which gaps between fins are blended using a blurring pass, which seemed wasteful, and may prohibit procedural outline effects like glowing or outline particles.&lt;/p>
+&lt;p>I started from scratch, but what I ended up with is a method similar to &lt;a href="http://cgstarad.com/Docs/GSContours.pdf">Single Pass GPU Stylized Edges&lt;/a> by Hermosilla and Vazquez, although implemented on the geometry shader, and also requiring about half the additional geometry. I would also argue that the method I&amp;rsquo;ve produced here is considerably simpler than any previous method.&lt;/p>
+&lt;h4 id="what-is-the-silhouette">What is the Silhouette?&lt;/h4>
+&lt;p>This is probably a good place to start. Assume for the moment that we have some nice continuous object (not a triangle mesh) like a perfect sphere. The silhouette is effectively a connected curve around the object where the surface of the object is exactly orthogonal to the direction of the viewer. Consider the horizon - the silhouette is the exact point at which the ground meets the sky.&lt;/p>
+&lt;p>Based on this we could formulate a simple definition of the silhouette as the set of all points \(x\) for which \(\mathbf{v}_x \cdot \mathbf{n}_x = 0 \), where \(\mathbf{v}_x\) is the view vector from the eye to \(x\) and \(\mathbf{n}_x\) is the normal at the point \(x\).&lt;/p>
+&lt;h3 id="method-overview">Method Overview&lt;/h3>
+&lt;h4 id="determining-the-silhouette-of-a-triangle-mesh">Determining the silhouette of a triangle mesh&lt;/h4>
+&lt;p>Now lets consider this on a triangle mesh. Any silhouette is only going exist between points on two edges of a subset of triangles on the mesh. We will assume that our triangle mesh is sufficiently dense so we can approximate the silhouette across the triangle face with a straight line (it would be possible to generate smoother curves using a Bezier spline or equivalent). The comparison of the discrete and the continuous silhouette case is demonstrated in the figure below:&lt;/p>
+&lt;center>&lt;img src="continuous_silhouette.svg"/>&lt;/center>
+&lt;p>Remember that a triangle mesh is typically an approximation of some smoother surface representation, and should in most cases have vertex normals defined which effectively allow us to generate smooth shading across each face, giving the illusion of a continuous surface representation. We can use this knowledge to determine which faces are on the silhouette.&lt;/p>
+&lt;p>Consider an edge with vertices at \(p_{0,1} \) with vertex normals \( \mathbf{n}_{0,1} \) respectively. If \(\mathbf{v}_0 \cdot \mathbf{n}_0 &amp;lt; 0 \) and \(\mathbf{v}_1 \cdot \mathbf{n}_1 &amp;gt; 0 \) (or visa versa), then somewhere along this edge there is an \(x\) for which \(\mathbf{v}_x \cdot \mathbf{n}_x = 0 \).&lt;/p>
+&lt;p>A wary reader will note that \(\mathbf{v}_0 \neq \mathbf{v}_1\) which might cause problems, but as we will see, all view vectors \(\mathbf{v}_x\) will be the same \(\forall x\).&lt;/p>
+&lt;h4 id="interpolation">Interpolation&lt;/h4>
+&lt;p>So we need to find the point \(x\) across the edge for which \(\mathbf{v}_x \cdot \mathbf{n}_x = 0 \). We&amp;rsquo;re going to make a couple of assumptions to simplify things. The first assumption is that we&amp;rsquo;re going to use simple linear interpolation for performance reasons. Accuracy will be affected, but we&amp;rsquo;re going to assume that the input mesh is dense and any accuracy issues will not be noticeable.&lt;/p>
+&lt;p>Linear interpolation would imply that we&amp;rsquo;re looking for some \(t\) for which \((1-t)\mathbf{v}_0 \cdot \mathbf{n}_0 + t \mathbf{v}_1 \cdot \mathbf{n}_1 = \mathbf{v}_x \cdot \mathbf{n}_x = 0 \), e.g. the interpolation parameter for which the the normal is zero.&lt;/p>
+&lt;p>The second assumption we&amp;rsquo;ll be creating the geometry of the fin on the &lt;a href="https://www.khronos.org/opengl/wiki/Geometry_Shader">geometry shader&lt;/a>, which means that by &lt;a href="https://www.khronos.org/opengl/wiki/Vertex_Shader">convention&lt;/a> we can rely on the fact that the geometry has already been projected, which means it already lives within a &lt;a href="https://cglearn.codelight.eu/pub/computer-graphics/frames-of-reference-and-projection">canonical viewing volume&lt;/a>. We can now reliably state that \(\mathbf{v}_0 = \mathbf{v}_1 = [0,0,-1]^T\), i.e. the view vector for all vertices is just from the origin looking in the \(-z\) direction by the &lt;a href="http://www.songho.ca/opengl/gl_transform.html">OpenGL camera convention&lt;/a>.&lt;/p>
+&lt;p>So this means that we can simplify the formulation significantly to just \( (1-t) \mathbf{n}_{(0,z)} + t\mathbf{n}_{(1,z)} = 0 \), which yields \( t = -\mathbf{n}_{(0,z)} / (\mathbf{n}_{(1,z)}-\mathbf{n}_{(0,z)}) \). Built into this formula is also the implicit test: \( 0 \leq t \leq 1 \implies \) the edge crosses the silhouette.&lt;/p>
+&lt;p>Below is this trivial function as implemented in the geometry shader:&lt;/p>
+&lt;pre>&lt;code class="language-cpp">/** This is where most of the magic happens - it determines the interpolation value
+* based on the z values of the two normals in order to detemrine a normal pointing
+* out orthogonal to the view direction.
+* \param n0,n1 The two input normals
+* \return The output interpolation value (between 0 and 1 if edge is on the silhouette)
+*/
+float isSilhouette(in vec3 n0, in vec3 n1) {
+// Trivial case: the normals are the same, so we'll just pick a point in the middle
+if (n1.z == n0.z) {
+return 0.5;
+} else {
+// Use our formula to determine the interpolation value and return a boolean based
+// on whether the interpolant is within the two input vectors
+return - n0.z / (n1.z - n0.z);
+}
+}
+&lt;/code>&lt;/pre>
+&lt;h4 id="putting-it-together">Putting it together&lt;/h4>
+&lt;p>The geometry shader to generate fins accepts a triangle as input and spawns a triangle strip of 4 vertices as output. Each triangle is going to be processed, and we can expect neighbouring triangles on the silhouette to be consistent - see the image below for an example (I appreciate that it&amp;rsquo;s not great):&lt;/p>
+&lt;center>&lt;img src="discrete_silhouette.svg"/>&lt;/center>
+&lt;p>The geometry shader iterates over all edges of the triangle and determines the value of \(t\) to see if it lies on the silhouette. If it does, a fin vertex and normal is determined using a straight linear interpolation (via the built-in mix function):&lt;/p>
+&lt;pre>&lt;code class="language-cpp"> // Iterate over all the edges in our triangle
+int j;
+for (int i = 0; i &amp;lt; 3; ++i) {
+j = (i+1)%3;
+t[cnt] = isSilhouette(normal[i], normal[j]);
+if ((t[cnt] &amp;gt;= 0.0) &amp;amp;&amp;amp; (t[cnt] &amp;lt;= 1.0)) {
+finVerts[cnt] = mix(pos[i], pos[j], t[cnt]);
+finNorms[cnt] = normalize(mix(normal[i], normal[j], t[cnt]));
+++cnt;
+}
+}
+&lt;/code>&lt;/pre>
+&lt;p>I did also experiment with higher order mixing methods, but these showed no discernable improvement and just added significantly to the computation cost and complexity so these approaches were scrapped.&lt;/p>
+&lt;p>Now if the variable cnt is exactly 2 then we know that this triangle cuts the silhouette and we need to generate a triangle strip fin:&lt;/p>
+&lt;pre>&lt;code class="language-cpp"> // If count is less than 2 don't do anything as there isn't a fin
+if (cnt &amp;gt;= 2) {
+// Create our triangle strip from the two input vertices and normals
+finColour = vec4(0,0,0,1); // You might want to visualise something with the color
+gl_Position = vec4(finVerts[0],1.0);
+EmitVertex();
+gl_Position = vec4(finVerts[1],1.0);
+EmitVertex();
+gl_Position = vec4(finVerts[0] + finScale * finNorms[0],1.0);
+EmitVertex();
+gl_Position = vec4(finVerts[1] + finScale * finNorms[1],1.0);
+EmitVertex();
+EndPrimitive();
+}
+&lt;/code>&lt;/pre>
+&lt;p>Note that the rendering of the fin is an additional render pass performed after you&amp;rsquo;ve rendered the main geometry, as the geometry shader will effectively &amp;ldquo;eat&amp;rdquo; the original geometry.&lt;/p>
+&lt;h3 id="results">Results&lt;/h3>
+&lt;p>Here are a couple of Buddha&amp;rsquo;s of various levels of thickness:&lt;/p>
+&lt;table width=100%>
+&lt;tr>
+&lt;td>&lt;img src="buddha1.png" width=100% />&lt;/td>
+&lt;td>&lt;img src="buddha2.png" width=100%/>&lt;/td>
+&lt;td>&lt;img src="buddha3.png" width=100%/>&lt;/td>
+&lt;/tr>
+&lt;/table>
+&lt;p>The results are close to perfect: the fins are consistent about both internal and external silhouettes. There are still a couple of problems which need resolving:&lt;/p>
+&lt;ul>
+&lt;li>The normals are not transformed correctly after projection. This is because the normals are needed in the world coordinates for the lighting calculations. You can see the error in that the line is not the same width everywhere on the silhouette. Unfortunately I&amp;rsquo;ve not yet figured out the correct method to transform the normals to be correct according to the canonical viewing volume - feel free to contact me if you have a solution to this.&lt;/li>
+&lt;li>The lines don&amp;rsquo;t taper when nearing the edge of an internal silhouette (leading to &amp;ldquo;sharpy edges&amp;rdquo;). This could be fixed by tiling a round texture map on the silhouette so the borders become rounded.&lt;/li>
+&lt;li>I have not explored all the fun effects that fins can do, like glow or illustrative visualisation: this is up to you!&lt;/li>
+&lt;/ul>
+&lt;h3 id="downloads">Downloads&lt;/h3>
+&lt;p>The source code is hosted on &lt;a href="https://github.com/rsouthern/Examples">GitHub&lt;/a>. Clone it from the repository using the following command from your console:&lt;/p>
+&lt;pre>&lt;code class="language-shell">git clone https://github.com/rsouthern/Examples
+&lt;/code>&lt;/pre>
+&lt;p>This example is under rendering/fins.&lt;/p></description></item><item><title>A Templated Implementation of Noise Texture</title><link>https://rsouthern.github.io/post/noisetexture/</link><pubDate>Thu, 30 Jun 2016 00:00:00 +0000</pubDate><guid>https://rsouthern.github.io/post/noisetexture/</guid><description>&lt;h3 id="introduction">Introduction&lt;/h3>
+&lt;p>The icon for this page was from my attempt to recreate a realtime shader for a varnished woodgrain effect. This approach requires the &lt;a href="http://libnoise.sourceforge.net/examples/textures/">combination of multiple layers&lt;/a> of &lt;a href="http://mrl.nyu.edu/~perlin/">Perlin&lt;/a> &lt;a href="https://en.wikipedia.org/wiki/Perlin_noise">noise&lt;/a>, which is probably infeasible to &lt;a href="https://github.com/ashima/webgl-noise/wiki">generate on the fly within the fragment shader&lt;/a> (although I&amp;rsquo;d love to be proven wrong). The generation of the wood grain shader will be saved for another post - in this one I&amp;rsquo;d like to discuss how I implemented a generic C++ template for the initialisation of the &amp;ldquo;general&amp;rdquo; dimensional noise texture on OpenGL.&lt;/p>
+&lt;h3 id="the-high-level-interface">The High Level Interface&lt;/h3>
+&lt;p>The central idea behind this class was to provide the following generalisations:&lt;/p>
+&lt;ol>
+&lt;li>&lt;em>General Dimensional Textures&lt;/em> - noise textures are typically either 2D or 3D (so you can &amp;ldquo;slice through&amp;rdquo; your material and expect a consistent pattern).&lt;/li>
+&lt;li>&lt;em>Generic Generator Functions&lt;/em> - the function that actually generates the noise must be completely generic.&lt;/li>
+&lt;/ol>
+&lt;p>For (1) above, this is realised by using a simple template parameter DIM:&lt;/p>
+&lt;pre>&lt;code class="language-cpp">template &amp;lt;size_t DIM&amp;gt;
+class NoiseTexture
+&lt;/code>&lt;/pre>
+&lt;p>So my interface to creating a 3D texture is something like:&lt;/p>
+&lt;pre>&lt;code class="language-cpp"> MyNoiseTexture&amp;lt;3&amp;gt; m_noise;
+&lt;/code>&lt;/pre>
+&lt;p>For (2), there were several ways to approach this. I could, for example, have passed a generator function / functor class as a template parameter. This would have required me to create different classes for each type of generation. However there are a couple of reasons why I used inheritance instead of this approach (which could be called the &lt;a href="http://www.bogotobogo.com/DesignPatterns/strategy.php">strategy pattern&lt;/a>):&lt;/p>
+&lt;ul>
+&lt;li>A function cannot store state, which is need for many noise generators, for example &lt;a href="http://www.boost.org/doc/libs/1_61_0/doc/html/boost_random.html">boost&lt;/a> or &lt;a href="http://libnoise.sourceforge.net/index.html">libnoise&lt;/a>,&lt;/li>
+&lt;li>A functor can store state, but will have the same level of class management and complexity as using inheritance, but more importantly&lt;/li>
+&lt;li>I may want to override other parts of the class to support parallel noise generation.&lt;/li>
+&lt;/ul>
+&lt;p>The interface noisetexture.h provides is to inherit from the base class and override the protected function&lt;/p>
+&lt;pre>&lt;code class="language-cpp"> /// A generator function to make the process of building noise easy
+virtual inline GLfloat generator_func(const CoordinateArrayf &amp;amp;) = 0;
+&lt;/code>&lt;/pre>
+&lt;p>This function simply accepts a coordinate in DIM space and returns a floating point value. Note that the NoiseTexture makes use of std::array as it should - this makes sure that this is managed memory rather than pointers. Two different arrays are defined:&lt;/p>
+&lt;pre>&lt;code class="language-cpp"> /// A static (i.e. not dynamic allocated) vector
+typedef std::array&amp;lt;size_t,DIM&amp;gt; CoordinateArray;
+typedef std::array&amp;lt;float, DIM&amp;gt; CoordinateArrayf;
+&lt;/code>&lt;/pre>
+&lt;p>One is for indices and the other for positions. This will be used in the recursive generation of the data block.&lt;/p>
+&lt;h3 id="generating-the-data">Generating the data&lt;/h3>
+&lt;p>Ultimately the initialisation of the OpenGL texture consists of copying a lump of data from the CPU memory to the GPU memory using a call to glTexImage. The following section of code creates the memory, fills it with data and copies it to the GPU:&lt;/p>
+&lt;pre>&lt;code class="language-cpp"> // Allocate a slab of data for the stuffing
+GLfloat *data = (GLfloat*) malloc(sizeof(GLfloat) * pow(m_res,DIM) * 3);
+// Use the recursive function to generate the data recursively
+CoordinateArray coord;
+generate_recurse(DIM, coord, data);
+// Copy our data over to the GPU
+copyTextureDataToGPU(data);
+// Delete our data - it's been copied onto the GPU right?
+free(data);
+&lt;/code>&lt;/pre>
+&lt;p>Unpicking the memory allocation from left to right:&lt;/p>
+&lt;ul>
+&lt;li>sizeof(GLfloat) - the size of an individual value (single precision)&lt;/li>
+&lt;li>pow(m_res,DIM) - the size of the block of data is squared/cubed as you would expect&lt;/li>
+&lt;li>3 - we need RGB values to copy to the GPU&lt;/li>
+&lt;/ul>
+&lt;p>Generate_recurse is defined as follows:&lt;/p>
+&lt;pre>&lt;code class="language-cpp"> /// Recursively generate the data
+virtual void generate_recurse(const size_t &amp;amp;/*dim*/, const CoordinateArray &amp;amp;/*coord*/, GLfloat */*data*/);
+&lt;/code>&lt;/pre>
+&lt;p>It will recursively evaluate the generator function on each of the different positions in the block of memory and write it to the appropriate index:&lt;/p>
+&lt;pre>&lt;code class="language-cpp">template &amp;lt;size_t DIM&amp;gt;
+void NoiseTexture&amp;lt;DIM&amp;gt;::generate_recurse(const size_t &amp;amp;d,
+const CoordinateArray&amp;amp; coord,
+GLfloat *data) {
+size_t dim_length = 1, data_pos = 0, i;
+CoordinateArrayf coordf, tmp;
+CoordinateArray ncoord;
+switch(d) {
+case 0:
+// At the end of the recursion chain we can evaluate the noise function
+for (i=0; i&amp;lt;DIM; ++i) {
+data_pos += coord[i] * dim_length;
+dim_length *= m_res;
+coordf[i] = m_inv_resf * float(coord[i]);
+}
+data_pos *= 3;
+// Fill up the data with data defined by the generator_func()
+for (i=0; i&amp;lt;3; ++i) {
+tmp = coordf; coordf[i] += 1.0f;
+data[data_pos + i] = generator_func(coordf);
+}
+break;
+default:
+// For the rest of the dimensions we recursively call all the remaining coordinates
+ncoord = coord;
+for (i=0; i&amp;lt;m_res; ++i) {
+ncoord[d-1] = i;
+generate_recurse(d-1, ncoord, data);
+}
+}
+}
+&lt;/code>&lt;/pre>
+&lt;p>Note that I have arbitrarily added 1.0f for each of the R, G, B channels to give a bit of a richer data set to play with.&lt;/p>
+&lt;h3 id="opengl-integration">OpenGL integration&lt;/h3>
+&lt;p>There are a number of standard functions which make this class usable in a GL context. For example, the function to find the texture:&lt;/p>
+&lt;pre>&lt;code class="language-cpp">template &amp;lt;size_t DIM&amp;gt;
+void NoiseTexture&amp;lt;DIM&amp;gt;::bind() const {
+if (m_isInit) {
+glBindTexture(m_target, m_texID);
+CheckError(&amp;quot;NoiseTexture&amp;lt;DIM&amp;gt;::bind() - glBindTexture()&amp;quot;);
+}
+}
+&lt;/code>&lt;/pre>
+&lt;p>Note the variable m_target, which is actually a constant, defined using this from within the class declaration:&lt;/p>
+&lt;pre>&lt;code class="language-cpp"> constexpr GLuint target() const {
+switch(DIM) {
+case 1:
+return GL_TEXTURE_1D;
+case 2:
+return GL_TEXTURE_2D;
+case 3:
+return GL_TEXTURE_3D;
+}
+return 0;
+}
+const GLuint m_target = target();
+&lt;/code>&lt;/pre>
+&lt;p>Take a moment to digest this: the function target is actually being executed at &lt;em>compile time&lt;/em>, and this is in fact an example of &lt;a href="https://en.wikipedia.org/wiki/Template_metaprogramming">template metaprogramming&lt;/a> (albeit, a rather simple one). The keyword constexpr allows this function to be executed in setting a constant at compile time. The use of the switch statement (and using multiple return statements in a function) is only allowable in C++14 or better (a simple if-else structure would remove this dependency).&lt;/p>
+&lt;p>The function which copies the data to the GPU is pretty straightforward:&lt;/p>
+&lt;pre>&lt;code class="language-cpp">template &amp;lt;size_t DIM&amp;gt;
+void NoiseTexture&amp;lt;DIM&amp;gt;::copyTextureDataToGPU(GLfloat *data) {
+// Transfer this data to our texture
+glGenTextures(1, &amp;amp;m_texID);
+glBindTexture(m_target, m_texID);
+// Repeat the texture for coordinates &amp;lt;0 or &amp;gt;1
+...
+// Use blending when texels are bigger or smaller than pixels
+...
+// Upload the texture data to the GPU
+switch(DIM) {
+case 1:
+glTexImage1D(m_target, // Target
+0, // Level
+GL_RGB, // Internal Format
+m_res, // width
+0, // border
+GL_RGB, // format
+GL_FLOAT, // type
+data);
+break;
+case 2:
+...
+case 3:
+...
+}
+}
+&lt;/code>&lt;/pre>
+&lt;p>Note that template specialisms could have been used here for the different TexImage calls, but due to the duplication of the texture parameters I decided against it.&lt;/p>
+&lt;h3 id="deriving-your-own-noise-texture-class">Deriving your own Noise Texture class&lt;/h3>
+&lt;p>The simplest example of a derived noise texture class is one which just sets the values in the data block to 1. This is demonstrated in testnoisetexture.h:&lt;/p>
+&lt;pre>&lt;code class="language-cpp">template&amp;lt;size_t DIM&amp;gt;
+class TestNoiseTexture : public NoiseTexture&amp;lt;DIM&amp;gt; {
+public:
+/// Constructor
+explicit TestNoiseTexture(float /*lower*/ = 0.0f,
+float /*upper*/ = 1.0f,
+size_t /*resolution*/ = 64);
+/// Dtor
+~TestNoiseTexture() {}
+protected:
+/// Specialisation of this class to generate pure white noise
+inline GLfloat generator_func(const typename NoiseTexture&amp;lt;DIM&amp;gt;::CoordinateArrayf &amp;amp;);
+};
+template&amp;lt;size_t DIM&amp;gt;
+TestNoiseTexture&amp;lt;DIM&amp;gt;::TestNoiseTexture(float _lower,
+float _upper,
+size_t _resolution)
+: NoiseTexture&amp;lt;DIM&amp;gt;(_lower,_upper,_resolution) {}
+template&amp;lt;size_t DIM&amp;gt;
+inline GLfloat TestNoiseTexture&amp;lt;DIM&amp;gt;::generator_func(const typename NoiseTexture&amp;lt;DIM&amp;gt;::CoordinateArrayf &amp;amp;coord) {
+return 1.0f;
+}
+&lt;/code>&lt;/pre>
+&lt;p>As you see above, all you need to do here is override the virtual generator_func with your own favourite noise generator. See the whitenoisetexture.h example for something a little more interesting. I&amp;rsquo;ll be looking to write a post about how this method was used to create the wood shader soon.&lt;/p>
+&lt;h3 id="downloads">Downloads&lt;/h3>
+&lt;p>Download the source files for these here:&lt;/p>
+&lt;ul>
+&lt;li>&lt;a href="noisetexture.h">noisetexture.h&lt;/a>&lt;/li>
+&lt;li>&lt;a href="testnoisetexture.h">testnoisetexture.h&lt;/a>&lt;/li>
+&lt;li>&lt;a href="whitenoisetexture.h">whitenoisetexture.h&lt;/a>&lt;/li>
+&lt;/ul></description></item></channel></rss>

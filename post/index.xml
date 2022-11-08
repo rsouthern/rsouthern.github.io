@@ -1,0 +1,1149 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes"?><rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom"><channel><title>Posts | Richard's Blog</title><link>https://rsouthern.github.io/post/</link><atom:link href="https://rsouthern.github.io/post/index.xml" rel="self" type="application/rss+xml"/><description>Posts</description><generator>Wowchemy (https://wowchemy.com)</generator><language>en-uk</language><lastBuildDate>Thu, 04 Feb 2021 00:00:00 +0000</lastBuildDate><image><url>https://rsouthern.github.io/images/icon_hu0365f2187e15210a9118469a64220edc_142871_512x512_fill_lanczos_center_2.png</url><title>Posts</title><link>https://rsouthern.github.io/post/</link></image><item><title>Visualising the Curriculum - fun with d3js</title><link>https://rsouthern.github.io/post/curriculum/</link><pubDate>Thu, 04 Feb 2021 00:00:00 +0000</pubDate><guid>https://rsouthern.github.io/post/curriculum/</guid><description>&lt;base href="{{ .Site.BaseURL }}">
+&lt;iframe height="500" style="width: 100%;" src="../rsouthern/Pages/curriculum/index.html">&lt;/iframe></description></item><item><title>Principal Curvature Aligned Anisotropic Shading</title><link>https://rsouthern.github.io/post/curv/</link><pubDate>Fri, 01 Jun 2018 00:00:00 +0000</pubDate><guid>https://rsouthern.github.io/post/curv/</guid><description>&lt;p>In this post I will discuss the math and code behind a method to generate the automated orientation of a shading vector field using the intrinsic geometric properties of the object.&lt;/p>
+&lt;h3 id="background">Background&lt;/h3>
+&lt;p>Anisotropic reflectance models are handy for modeling shading behaviours at the microfacet level which conform with some sort of oriented field, for example, brushed metal:
+&lt;img src="Brushed_Aluminium.jpg" alt="Brushed aluminum">&lt;/p>
+&lt;p>The &lt;a href="http://radsite.lbl.gov/radiance/papers/sg92/paper.html">Ward anisotropic specular reflectance model&lt;/a> can (after some simplification, for which I unfortunately do not have a clear reference) be stated as:
+\begin{equation}
+\frac{(\mathbf{l}\cdot \mathbf{n})}{(\mathbf{v}\cdot \mathbf{n})} \exp \left( -2 \frac{ \left(\frac{\mathbf{h}\cdot\mathbf{x}}{\alpha_x} \right)^2 + \left(\frac{\mathbf{h}\cdot \mathbf{y}}{\alpha_y} \right)^2}{(1+\mathbf{h} \cdot \mathbf{n})}\right),
+\end{equation}
+where \(\mathbf{n}\) is the surface normal at a point, $\mathbf{l}$ is the vector from the point to the light source, \(\mathbf{v}\) is the vector from the point to the eye and \(\mathbf{h}\) is the half vector defined as \(\mathbf{h}=(\mathbf{l}+\mathbf{v})/\|\cdot \| \). The important anisotropic bits are the vectors \(\mathbf{x}, \mathbf{y}\), which define the (orthogonal) directions of anisotropy, and \(\alpha_x\) and \(\alpha_y\) define the standard deviation of the surface slope in the \(\mathbf{x}\) and \(\mathbf{y}\) directions respectively. They scale the &amp;ldquo;amount&amp;rdquo; of anisotropy in each of the directions. Note that \(\mathbf{x}\), \(\mathbf{y}\), and \(\mathbf{n}\), should define an orthogonal coordinate frame.&lt;/p>
+&lt;p>This might be implemented in a fragment shader as something similar to this:&lt;/p>
+&lt;pre>&lt;code class="language-cpp"> vec3 halfwayVector = normalize(lightDirection + viewDirection);
+vec3 normalDirection = normalize(FragNormal);
+vec3 tangentDirection = normalize(FragK1);
+vec3 binormalDirection = normalize(FragK2); // this also works: cross(normalDirection, tangentDirection);
+float dotLN = dot(lightDirection, normalDirection);
+vec3 diffuseReflection = attenuation * Light.Ld * Material.Kd * max(0.0, dotLN);
+float dotHN = dot(halfwayVector, normalDirection);
+float dotVN = dot(viewDirection, normalDirection);
+float dotHTAlphaX = dot(halfwayVector, tangentDirection) / alphaX;
+float dotHBAlphaY = dot(halfwayVector, binormalDirection) / alphaY;
+vec3 specularReflection;
+if (dotLN &amp;lt; 0.0) // light source on the wrong side?
+{specularReflection = vec3(0.0);} else {
+// light source on the right side
+specularReflection = attenuation * Material.Ks
+* max(0.0,(dotLN/dotVN))
+* exp(-2.0 * (dotHTAlphaX * dotHTAlphaX + dotHBAlphaY * dotHBAlphaY) / (1.0 + dotHN));
+}
+fragColor = vec4(specularReflection + diffuseReflection, 1.0);
+&lt;/code>&lt;/pre>
+&lt;p>In order for us to generate good quality anisotropic fields using this formulation we see that we would have to provide per-pixel values for \(\mathbf{x}\), \(\mathbf{y}\), \(\alpha_x\) and \(\alpha_y\) (note that as \(\mathbf{y}\) is orthogonal to \(\mathbf{x}\) and \(\mathbf{n}\) so theoretically this can be deduced). Typically in a shader the vector field would be inferred by interpolation from a texture map containing direction vectors. As this involves a lot of effort, I looked into something a little more automated.&lt;/p>
+&lt;h3 id="lines-of-principal-curvature">Lines of Principal Curvature&lt;/h3>
+&lt;p>Most interesting surfaces are curved in some way. You&amp;rsquo;re probably already familiar with the concept of a &lt;em>normal&lt;/em> to a surface: if we zoom in enough to a surface (or manifold) it will look pretty flat. The vector defining the orientation of this plane is called a normal at a point on the surface.&lt;/p>
+&lt;p>Interestingly there are two other vectors that are defined in that tangent plane - one defines the direction and magnitude in which the rate the normal changes across the surface is at a &lt;em>maximum&lt;/em>, and other the &lt;em>least&lt;/em> - these are called the maximum and minimum principal curvature directions respectively, and are often symbolized by \(\mathbf{k}_1\) and \(\mathbf{k}_2\) respectively.&lt;/p>
+&lt;center>&lt;img width=50% src="https://upload.wikimedia.org/wikipedia/commons/e/eb/Minimal_surface_curvature_planes-en.svg"/>&lt;/center>
+The &lt;a href="https://en.wikipedia.org/wiki/Principal_curvature">figure&lt;/a> above demonstrates the principal curvature directions for a saddle point, which lie in the orthogonal bisecting planes which intersect at the point where the curvature is measured. Interestingly a geometrically perfect saddle point and sphere would have $ \\|\mathbf{k}_1\\| = \\|\mathbf{k}_2\\| $.
+&lt;p>These vectors are defined at all points over a smooth surface, and seem like a good choice for an intrinsic surface property suitable for defining our shading orientation, i.e. let \(\mathbf{k}_1 = \alpha_x \mathbf{x}\) and \(\mathbf{k}_2 = \alpha_y \mathbf{y}\). However there is a snag - the flow of the principal curvature direction is undefined, e.g. \(\mathbf{k}_1, \mathbf{k}_2\) and \(-\mathbf{k}_1, -\mathbf{k}_2\) are both equally valid principle curvature directions at any point as the frame can be arbitrarily flipped around (which we&amp;rsquo;ll see later is a bit of a problem).&lt;/p>
+&lt;h3 id="computing-the-principal-curvature-directions">Computing the Principal Curvature Directions&lt;/h3>
+&lt;p>There are a number of methods to compute principal curvature directions over a triangle mesh. I&amp;rsquo;m not going to dwell on it here. The library I used for this is &lt;a href="https://github.com/libigl/libigl">libigl&lt;/a> which provides a simple header only library based on the math library &lt;a href="http://eigen.tuxfamily.org">Eigen&lt;/a>. The full explanation of how libigl deduces the principle curvature directions is described &lt;a href="http://libigl.github.io/libigl/tutorial/tutorial.html#curvaturedirections">here&lt;/a>.&lt;/p>
+&lt;p>The code for loading up a mesh, deducing vertex normals and extracting the principal curvature directions is below:&lt;/p>
+&lt;pre>&lt;code class="language-cpp"> // Read a mesh from a file into igl
+MatrixXfr V;
+MatrixXir F;
+igl::read_triangle_mesh(filename, V, F);
+// Determine the smooth corner normals
+MatrixXfr N;
+igl::per_vertex_normals(V,F,N);
+// Compute the principle curvature directions and magnitude using quadric fitting
+MatrixXfr K1,K2;
+Eigen::VectorXf KV1,KV2;
+igl::principal_curvature(V,F,K1,K2,KV1,KV2);
+&lt;/code>&lt;/pre>
+&lt;p>Note that the KV1 and KV2 hold the magnitude of each vector (K1 and K2 are normalized). This seemed a bit wasteful so I recombined these into a single vertex structure which contained the position, normal and scaled \(\mathbf{k}_1\) and \(\mathbf{k}_2\):&lt;/p>
+&lt;pre>&lt;code class="language-cpp"> MatrixXfr KV1_mat(K1.rows(), K1.cols()); KV1_mat &amp;lt;&amp;lt; KV1,KV1,KV1;
+MatrixXfr KV2_mat(K2.rows(), K2.cols()); KV2_mat &amp;lt;&amp;lt; KV2,KV2,KV2;
+K1.array() = KV1_mat.array() * K1.array();
+K2.array() = KV2_mat.array() * K2.array();
+// Now concatenate our per vertex data into a big chunk of data in Eigen
+MatrixXfr Vertices(V.rows(), V.cols() + N.cols() + K1.cols() + K2.cols());
+Vertices &amp;lt;&amp;lt; V, N, K1, K2;
+&lt;/code>&lt;/pre>
+&lt;p>Be wary as what these libraries gain in ease of use they sacrifice in terms of performance, so the application takes quite a while on startup to compute these matrices and vectors.&lt;/p>
+&lt;p>The curvature vectors generated using this process can be visualised as follows:
+&lt;img src="curvatureshading_wrong_vectors.png" alt="Unoriented curvature vectors">
+In this case the coordinate frame at each point is defined by the normal (in red), \(\mathbf{k}_1\), the maximum curvature direction and magnitude (in blue) and \(\mathbf{k}_2\), the minimum curvature direction (in green).&lt;/p>
+&lt;h3 id="early-results">Early results&lt;/h3>
+&lt;p>This all sounds like a great idea, but when we render these vectors, we get something a bit unexpected:
+&lt;img src="curvatureshading_wrong.png" alt="Unoriented curvature shading">
+Actually, these results are entirely predictable. For a first implementation, the curvatures are defined as vertex properties, which are simply passed on to the fragment shader to shade. This means that the curvatures are being &lt;em>intepolated across the face per fragment&lt;/em>.&lt;/p>
+&lt;p>Looking at the curvature directions from the previous section, we can see that the curvature vectors do not define a consistent flow over the surface. This is because the curvature is deduced independently at each vertex, and perfectly valid in either direction of flow, e.g. I could rotate by 180 degrees about the normal and the principle curvature directions are the same.&lt;/p>
+&lt;p>To the Ward shading algorithm it doesn&amp;rsquo;t matter, as \(\mathbf{x}\) and \(\mathbf{y}\) are effectively squared so the sign will disappear. However, during rasterization the vectors will be interpolated across the face - the curvature vectors at the corners of a face may be pointing in opposite directions, which means that the interpolated vector will sweep between them.&lt;/p>
+&lt;p>One option is to re-orient all of the curvature vectors as a preprocess. The only method I&amp;rsquo;m aware of to consistently orient the curvature field is based on the method described in &lt;a href="https://dl.acm.org/citation.cfm?id=882296">Anisotropic Polygonal Remeshing&lt;/a> by Alliez et al. (also available &lt;a href="ftp://ftp-sop.inria.fr/prisme/alliez/anisotropic.pdf">[here]&lt;/a>) but this involves smoothing the tensor field, identifying umbilics and iteratively growing streamlines across the surface, which seemed somewhat tedious.&lt;/p>
+&lt;h3 id="curvature-direction-correction-on-the-gpu">Curvature Direction Correction on the GPU&lt;/h3>
+&lt;p>One of the convenient properties of the rendering process is that the triangle mesh (which may have shared vertex properties) is essentially broken up into independent triangles for the purposes of rendering as fragments. This effectively means that the vertex properties will be duplicated for each corner of each face coincident on a vertex.&lt;/p>
+&lt;p>Each face with the vertex properties to be interpolated are passed on to a Geometry Shader before the Fragment Shading stage of the pipeline. At this stage we are free to flip around \(\mathbf{k}_1\) and \(\mathbf{k}_2\) in order to ensure that all the curvature vectors at the corners are consistently oriented for this particular face. Note that which a neighbouring face might have these vectors oriented in a different direction, it doesn&amp;rsquo;t matter due to the properties of the Ward shading model.&lt;/p>
+&lt;pre>&lt;code class="language-cpp">void main() {
+// The first triangle vertex is just going to be copied across
+gl_Position = gl_in[0].gl_Position;
+FragPosition = GeoPosition[0];
+FragNormal = GeoNormal[0];
+FragK1 = GeoK1[0];
+FragK2 = GeoK2[0];
+EmitVertex();
+for(int i = 1; i &amp;lt; 3; ++i) {
+// Copy across the vertex position
+gl_Position = gl_in[i].gl_Position;
+FragPosition = GeoPosition[i];
+FragNormal = GeoNormal[i];
+// Determine whether the curvature is flipped, if so, correct the curvature normal
+FragK1 = ((dot(GeoK1[0], GeoK1[i]) &amp;lt; 0.0)?-1.0:1.0) * GeoK1[i];
+FragK2 = ((dot(GeoK2[0], GeoK2[i]) &amp;lt; 0.0)?-1.0:1.0) * GeoK2[i];
+// Emit the vertex of this primitive
+EmitVertex();
+}
+// Finish the triangle (strip)
+EndPrimitive();
+}
+&lt;/code>&lt;/pre>
+&lt;p>As you can see all this does is copy across the first vertex, and then copy across the other two triangle vertices, but first possibly flipping the curvature vectors if they are oriented differently to the first vertex. Not particularly high-brow stuff, but it gets the job done.&lt;/p>
+&lt;h3 id="final-results">Final Results&lt;/h3>
+&lt;p>Here is the bust model with three different scalings of the anisotropy aligned to the principle curvature directions:&lt;/p>
+&lt;table width=100%>
+&lt;tr>
+&lt;td> &lt;img width=100% src="bust01.png"/>&lt;/td>
+&lt;td>&lt;img width=100% src="bust02.png"/>&lt;/td>
+&lt;td>&lt;img width=100% src="bust03.png"/>&lt;/td>
+&lt;/tr>
+&lt;/table>
+&lt;p>While the face flipping problem has been fixed, the obvious issue with these results in that the curvature is not particularly smooth, mainly because of the resolution of the model but also because there has been not smoothing of the vector field. There are also issues relating to the placement of umbilics. These things could be improved by performing smoothing as described in &lt;a href="https://dl.acm.org/citation.cfm?id=882296">this method&lt;/a> or using a mesh with a higher resolution. In addition, a method which allows the user to &amp;ldquo;hide&amp;rdquo; umbilic points in geometric areas where they won&amp;rsquo;t be seen would be useful.&lt;/p>
+&lt;h3 id="downloads">Downloads&lt;/h3>
+&lt;p>The source code is hosted on &lt;a href="https://github.com/rsouthern/Examples">GitHub&lt;/a>. Clone it from the repository using the following command from your console:&lt;/p>
+&lt;pre>&lt;code class="language-shell">git clone https://github.com/rsouthern/Examples
+&lt;/code>&lt;/pre>
+&lt;p>This example is under rendering/curv.&lt;/p></description></item><item><title>Realtime Silhouette Rendering with Consistent Geometric Fins</title><link>https://rsouthern.github.io/post/fins/</link><pubDate>Tue, 01 May 2018 00:00:00 +0000</pubDate><guid>https://rsouthern.github.io/post/fins/</guid><description>&lt;h3 id="background">Background&lt;/h3>
+&lt;p>&lt;a href="https://en.wikipedia.org/wiki/Cel_shading">Cel shading&lt;/a> is a common shading technique designed to make 3D geometry look like it was hand painted in a traditional way. While it is fairly trivial to darken vertices on the silhouette, to truly emulate the effect of a hand drawn outline, the ink outline must extend &lt;em>outside&lt;/em> the silhouette of the object at a constant thickness for it to appear plausible. Games like &lt;a href="https://en.wikipedia.org/wiki/Borderlands_(video_game)">Borderlands&lt;/a> make liberal use of outline geometry to enhance the non-photorealistic style of the game.&lt;/p>
+&lt;p>My starting point was the &lt;a href="http://prideout.net/blog/?p=54">blog post&lt;/a> by Philip Rideout in which gaps between fins are blended using a blurring pass, which seemed wasteful, and may prohibit procedural outline effects like glowing or outline particles.&lt;/p>
+&lt;p>I started from scratch, but what I ended up with is a method similar to &lt;a href="http://cgstarad.com/Docs/GSContours.pdf">Single Pass GPU Stylized Edges&lt;/a> by Hermosilla and Vazquez, although implemented on the geometry shader, and also requiring about half the additional geometry. I would also argue that the method I&amp;rsquo;ve produced here is considerably simpler than any previous method.&lt;/p>
+&lt;h4 id="what-is-the-silhouette">What is the Silhouette?&lt;/h4>
+&lt;p>This is probably a good place to start. Assume for the moment that we have some nice continuous object (not a triangle mesh) like a perfect sphere. The silhouette is effectively a connected curve around the object where the surface of the object is exactly orthogonal to the direction of the viewer. Consider the horizon - the silhouette is the exact point at which the ground meets the sky.&lt;/p>
+&lt;p>Based on this we could formulate a simple definition of the silhouette as the set of all points \(x\) for which \(\mathbf{v}_x \cdot \mathbf{n}_x = 0 \), where \(\mathbf{v}_x\) is the view vector from the eye to \(x\) and \(\mathbf{n}_x\) is the normal at the point \(x\).&lt;/p>
+&lt;h3 id="method-overview">Method Overview&lt;/h3>
+&lt;h4 id="determining-the-silhouette-of-a-triangle-mesh">Determining the silhouette of a triangle mesh&lt;/h4>
+&lt;p>Now lets consider this on a triangle mesh. Any silhouette is only going exist between points on two edges of a subset of triangles on the mesh. We will assume that our triangle mesh is sufficiently dense so we can approximate the silhouette across the triangle face with a straight line (it would be possible to generate smoother curves using a Bezier spline or equivalent). The comparison of the discrete and the continuous silhouette case is demonstrated in the figure below:&lt;/p>
+&lt;center>&lt;img src="continuous_silhouette.svg"/>&lt;/center>
+&lt;p>Remember that a triangle mesh is typically an approximation of some smoother surface representation, and should in most cases have vertex normals defined which effectively allow us to generate smooth shading across each face, giving the illusion of a continuous surface representation. We can use this knowledge to determine which faces are on the silhouette.&lt;/p>
+&lt;p>Consider an edge with vertices at \(p_{0,1} \) with vertex normals \( \mathbf{n}_{0,1} \) respectively. If \(\mathbf{v}_0 \cdot \mathbf{n}_0 &amp;lt; 0 \) and \(\mathbf{v}_1 \cdot \mathbf{n}_1 &amp;gt; 0 \) (or visa versa), then somewhere along this edge there is an \(x\) for which \(\mathbf{v}_x \cdot \mathbf{n}_x = 0 \).&lt;/p>
+&lt;p>A wary reader will note that \(\mathbf{v}_0 \neq \mathbf{v}_1\) which might cause problems, but as we will see, all view vectors \(\mathbf{v}_x\) will be the same \(\forall x\).&lt;/p>
+&lt;h4 id="interpolation">Interpolation&lt;/h4>
+&lt;p>So we need to find the point \(x\) across the edge for which \(\mathbf{v}_x \cdot \mathbf{n}_x = 0 \). We&amp;rsquo;re going to make a couple of assumptions to simplify things. The first assumption is that we&amp;rsquo;re going to use simple linear interpolation for performance reasons. Accuracy will be affected, but we&amp;rsquo;re going to assume that the input mesh is dense and any accuracy issues will not be noticeable.&lt;/p>
+&lt;p>Linear interpolation would imply that we&amp;rsquo;re looking for some \(t\) for which \((1-t)\mathbf{v}_0 \cdot \mathbf{n}_0 + t \mathbf{v}_1 \cdot \mathbf{n}_1 = \mathbf{v}_x \cdot \mathbf{n}_x = 0 \), e.g. the interpolation parameter for which the the normal is zero.&lt;/p>
+&lt;p>The second assumption we&amp;rsquo;ll be creating the geometry of the fin on the &lt;a href="https://www.khronos.org/opengl/wiki/Geometry_Shader">geometry shader&lt;/a>, which means that by &lt;a href="https://www.khronos.org/opengl/wiki/Vertex_Shader">convention&lt;/a> we can rely on the fact that the geometry has already been projected, which means it already lives within a &lt;a href="https://cglearn.codelight.eu/pub/computer-graphics/frames-of-reference-and-projection">canonical viewing volume&lt;/a>. We can now reliably state that \(\mathbf{v}_0 = \mathbf{v}_1 = [0,0,-1]^T\), i.e. the view vector for all vertices is just from the origin looking in the \(-z\) direction by the &lt;a href="http://www.songho.ca/opengl/gl_transform.html">OpenGL camera convention&lt;/a>.&lt;/p>
+&lt;p>So this means that we can simplify the formulation significantly to just \( (1-t) \mathbf{n}_{(0,z)} + t\mathbf{n}_{(1,z)} = 0 \), which yields \( t = -\mathbf{n}_{(0,z)} / (\mathbf{n}_{(1,z)}-\mathbf{n}_{(0,z)}) \). Built into this formula is also the implicit test: \( 0 \leq t \leq 1 \implies \) the edge crosses the silhouette.&lt;/p>
+&lt;p>Below is this trivial function as implemented in the geometry shader:&lt;/p>
+&lt;pre>&lt;code class="language-cpp">/** This is where most of the magic happens - it determines the interpolation value
+* based on the z values of the two normals in order to detemrine a normal pointing
+* out orthogonal to the view direction.
+* \param n0,n1 The two input normals
+* \return The output interpolation value (between 0 and 1 if edge is on the silhouette)
+*/
+float isSilhouette(in vec3 n0, in vec3 n1) {
+// Trivial case: the normals are the same, so we'll just pick a point in the middle
+if (n1.z == n0.z) {
+return 0.5;
+} else {
+// Use our formula to determine the interpolation value and return a boolean based
+// on whether the interpolant is within the two input vectors
+return - n0.z / (n1.z - n0.z);
+}
+}
+&lt;/code>&lt;/pre>
+&lt;h4 id="putting-it-together">Putting it together&lt;/h4>
+&lt;p>The geometry shader to generate fins accepts a triangle as input and spawns a triangle strip of 4 vertices as output. Each triangle is going to be processed, and we can expect neighbouring triangles on the silhouette to be consistent - see the image below for an example (I appreciate that it&amp;rsquo;s not great):&lt;/p>
+&lt;center>&lt;img src="discrete_silhouette.svg"/>&lt;/center>
+&lt;p>The geometry shader iterates over all edges of the triangle and determines the value of \(t\) to see if it lies on the silhouette. If it does, a fin vertex and normal is determined using a straight linear interpolation (via the built-in mix function):&lt;/p>
+&lt;pre>&lt;code class="language-cpp"> // Iterate over all the edges in our triangle
+int j;
+for (int i = 0; i &amp;lt; 3; ++i) {
+j = (i+1)%3;
+t[cnt] = isSilhouette(normal[i], normal[j]);
+if ((t[cnt] &amp;gt;= 0.0) &amp;amp;&amp;amp; (t[cnt] &amp;lt;= 1.0)) {
+finVerts[cnt] = mix(pos[i], pos[j], t[cnt]);
+finNorms[cnt] = normalize(mix(normal[i], normal[j], t[cnt]));
+++cnt;
+}
+}
+&lt;/code>&lt;/pre>
+&lt;p>I did also experiment with higher order mixing methods, but these showed no discernable improvement and just added significantly to the computation cost and complexity so these approaches were scrapped.&lt;/p>
+&lt;p>Now if the variable cnt is exactly 2 then we know that this triangle cuts the silhouette and we need to generate a triangle strip fin:&lt;/p>
+&lt;pre>&lt;code class="language-cpp"> // If count is less than 2 don't do anything as there isn't a fin
+if (cnt &amp;gt;= 2) {
+// Create our triangle strip from the two input vertices and normals
+finColour = vec4(0,0,0,1); // You might want to visualise something with the color
+gl_Position = vec4(finVerts[0],1.0);
+EmitVertex();
+gl_Position = vec4(finVerts[1],1.0);
+EmitVertex();
+gl_Position = vec4(finVerts[0] + finScale * finNorms[0],1.0);
+EmitVertex();
+gl_Position = vec4(finVerts[1] + finScale * finNorms[1],1.0);
+EmitVertex();
+EndPrimitive();
+}
+&lt;/code>&lt;/pre>
+&lt;p>Note that the rendering of the fin is an additional render pass performed after you&amp;rsquo;ve rendered the main geometry, as the geometry shader will effectively &amp;ldquo;eat&amp;rdquo; the original geometry.&lt;/p>
+&lt;h3 id="results">Results&lt;/h3>
+&lt;p>Here are a couple of Buddha&amp;rsquo;s of various levels of thickness:&lt;/p>
+&lt;table width=100%>
+&lt;tr>
+&lt;td>&lt;img src="buddha1.png" width=100% />&lt;/td>
+&lt;td>&lt;img src="buddha2.png" width=100%/>&lt;/td>
+&lt;td>&lt;img src="buddha3.png" width=100%/>&lt;/td>
+&lt;/tr>
+&lt;/table>
+&lt;p>The results are close to perfect: the fins are consistent about both internal and external silhouettes. There are still a couple of problems which need resolving:&lt;/p>
+&lt;ul>
+&lt;li>The normals are not transformed correctly after projection. This is because the normals are needed in the world coordinates for the lighting calculations. You can see the error in that the line is not the same width everywhere on the silhouette. Unfortunately I&amp;rsquo;ve not yet figured out the correct method to transform the normals to be correct according to the canonical viewing volume - feel free to contact me if you have a solution to this.&lt;/li>
+&lt;li>The lines don&amp;rsquo;t taper when nearing the edge of an internal silhouette (leading to &amp;ldquo;sharpy edges&amp;rdquo;). This could be fixed by tiling a round texture map on the silhouette so the borders become rounded.&lt;/li>
+&lt;li>I have not explored all the fun effects that fins can do, like glow or illustrative visualisation: this is up to you!&lt;/li>
+&lt;/ul>
+&lt;h3 id="downloads">Downloads&lt;/h3>
+&lt;p>The source code is hosted on &lt;a href="https://github.com/rsouthern/Examples">GitHub&lt;/a>. Clone it from the repository using the following command from your console:&lt;/p>
+&lt;pre>&lt;code class="language-shell">git clone https://github.com/rsouthern/Examples
+&lt;/code>&lt;/pre>
+&lt;p>This example is under rendering/fins.&lt;/p></description></item><item><title>A Templated Implementation of Noise Texture</title><link>https://rsouthern.github.io/post/noisetexture/</link><pubDate>Thu, 30 Jun 2016 00:00:00 +0000</pubDate><guid>https://rsouthern.github.io/post/noisetexture/</guid><description>&lt;h3 id="introduction">Introduction&lt;/h3>
+&lt;p>The icon for this page was from my attempt to recreate a realtime shader for a varnished woodgrain effect. This approach requires the &lt;a href="http://libnoise.sourceforge.net/examples/textures/">combination of multiple layers&lt;/a> of &lt;a href="http://mrl.nyu.edu/~perlin/">Perlin&lt;/a> &lt;a href="https://en.wikipedia.org/wiki/Perlin_noise">noise&lt;/a>, which is probably infeasible to &lt;a href="https://github.com/ashima/webgl-noise/wiki">generate on the fly within the fragment shader&lt;/a> (although I&amp;rsquo;d love to be proven wrong). The generation of the wood grain shader will be saved for another post - in this one I&amp;rsquo;d like to discuss how I implemented a generic C++ template for the initialisation of the &amp;ldquo;general&amp;rdquo; dimensional noise texture on OpenGL.&lt;/p>
+&lt;h3 id="the-high-level-interface">The High Level Interface&lt;/h3>
+&lt;p>The central idea behind this class was to provide the following generalisations:&lt;/p>
+&lt;ol>
+&lt;li>&lt;em>General Dimensional Textures&lt;/em> - noise textures are typically either 2D or 3D (so you can &amp;ldquo;slice through&amp;rdquo; your material and expect a consistent pattern).&lt;/li>
+&lt;li>&lt;em>Generic Generator Functions&lt;/em> - the function that actually generates the noise must be completely generic.&lt;/li>
+&lt;/ol>
+&lt;p>For (1) above, this is realised by using a simple template parameter DIM:&lt;/p>
+&lt;pre>&lt;code class="language-cpp">template &amp;lt;size_t DIM&amp;gt;
+class NoiseTexture
+&lt;/code>&lt;/pre>
+&lt;p>So my interface to creating a 3D texture is something like:&lt;/p>
+&lt;pre>&lt;code class="language-cpp"> MyNoiseTexture&amp;lt;3&amp;gt; m_noise;
+&lt;/code>&lt;/pre>
+&lt;p>For (2), there were several ways to approach this. I could, for example, have passed a generator function / functor class as a template parameter. This would have required me to create different classes for each type of generation. However there are a couple of reasons why I used inheritance instead of this approach (which could be called the &lt;a href="http://www.bogotobogo.com/DesignPatterns/strategy.php">strategy pattern&lt;/a>):&lt;/p>
+&lt;ul>
+&lt;li>A function cannot store state, which is need for many noise generators, for example &lt;a href="http://www.boost.org/doc/libs/1_61_0/doc/html/boost_random.html">boost&lt;/a> or &lt;a href="http://libnoise.sourceforge.net/index.html">libnoise&lt;/a>,&lt;/li>
+&lt;li>A functor can store state, but will have the same level of class management and complexity as using inheritance, but more importantly&lt;/li>
+&lt;li>I may want to override other parts of the class to support parallel noise generation.&lt;/li>
+&lt;/ul>
+&lt;p>The interface noisetexture.h provides is to inherit from the base class and override the protected function&lt;/p>
+&lt;pre>&lt;code class="language-cpp"> /// A generator function to make the process of building noise easy
+virtual inline GLfloat generator_func(const CoordinateArrayf &amp;amp;) = 0;
+&lt;/code>&lt;/pre>
+&lt;p>This function simply accepts a coordinate in DIM space and returns a floating point value. Note that the NoiseTexture makes use of std::array as it should - this makes sure that this is managed memory rather than pointers. Two different arrays are defined:&lt;/p>
+&lt;pre>&lt;code class="language-cpp"> /// A static (i.e. not dynamic allocated) vector
+typedef std::array&amp;lt;size_t,DIM&amp;gt; CoordinateArray;
+typedef std::array&amp;lt;float, DIM&amp;gt; CoordinateArrayf;
+&lt;/code>&lt;/pre>
+&lt;p>One is for indices and the other for positions. This will be used in the recursive generation of the data block.&lt;/p>
+&lt;h3 id="generating-the-data">Generating the data&lt;/h3>
+&lt;p>Ultimately the initialisation of the OpenGL texture consists of copying a lump of data from the CPU memory to the GPU memory using a call to glTexImage. The following section of code creates the memory, fills it with data and copies it to the GPU:&lt;/p>
+&lt;pre>&lt;code class="language-cpp"> // Allocate a slab of data for the stuffing
+GLfloat *data = (GLfloat*) malloc(sizeof(GLfloat) * pow(m_res,DIM) * 3);
+// Use the recursive function to generate the data recursively
+CoordinateArray coord;
+generate_recurse(DIM, coord, data);
+// Copy our data over to the GPU
+copyTextureDataToGPU(data);
+// Delete our data - it's been copied onto the GPU right?
+free(data);
+&lt;/code>&lt;/pre>
+&lt;p>Unpicking the memory allocation from left to right:&lt;/p>
+&lt;ul>
+&lt;li>sizeof(GLfloat) - the size of an individual value (single precision)&lt;/li>
+&lt;li>pow(m_res,DIM) - the size of the block of data is squared/cubed as you would expect&lt;/li>
+&lt;li>3 - we need RGB values to copy to the GPU&lt;/li>
+&lt;/ul>
+&lt;p>Generate_recurse is defined as follows:&lt;/p>
+&lt;pre>&lt;code class="language-cpp"> /// Recursively generate the data
+virtual void generate_recurse(const size_t &amp;amp;/*dim*/, const CoordinateArray &amp;amp;/*coord*/, GLfloat */*data*/);
+&lt;/code>&lt;/pre>
+&lt;p>It will recursively evaluate the generator function on each of the different positions in the block of memory and write it to the appropriate index:&lt;/p>
+&lt;pre>&lt;code class="language-cpp">template &amp;lt;size_t DIM&amp;gt;
+void NoiseTexture&amp;lt;DIM&amp;gt;::generate_recurse(const size_t &amp;amp;d,
+const CoordinateArray&amp;amp; coord,
+GLfloat *data) {
+size_t dim_length = 1, data_pos = 0, i;
+CoordinateArrayf coordf, tmp;
+CoordinateArray ncoord;
+switch(d) {
+case 0:
+// At the end of the recursion chain we can evaluate the noise function
+for (i=0; i&amp;lt;DIM; ++i) {
+data_pos += coord[i] * dim_length;
+dim_length *= m_res;
+coordf[i] = m_inv_resf * float(coord[i]);
+}
+data_pos *= 3;
+// Fill up the data with data defined by the generator_func()
+for (i=0; i&amp;lt;3; ++i) {
+tmp = coordf; coordf[i] += 1.0f;
+data[data_pos + i] = generator_func(coordf);
+}
+break;
+default:
+// For the rest of the dimensions we recursively call all the remaining coordinates
+ncoord = coord;
+for (i=0; i&amp;lt;m_res; ++i) {
+ncoord[d-1] = i;
+generate_recurse(d-1, ncoord, data);
+}
+}
+}
+&lt;/code>&lt;/pre>
+&lt;p>Note that I have arbitrarily added 1.0f for each of the R, G, B channels to give a bit of a richer data set to play with.&lt;/p>
+&lt;h3 id="opengl-integration">OpenGL integration&lt;/h3>
+&lt;p>There are a number of standard functions which make this class usable in a GL context. For example, the function to find the texture:&lt;/p>
+&lt;pre>&lt;code class="language-cpp">template &amp;lt;size_t DIM&amp;gt;
+void NoiseTexture&amp;lt;DIM&amp;gt;::bind() const {
+if (m_isInit) {
+glBindTexture(m_target, m_texID);
+CheckError(&amp;quot;NoiseTexture&amp;lt;DIM&amp;gt;::bind() - glBindTexture()&amp;quot;);
+}
+}
+&lt;/code>&lt;/pre>
+&lt;p>Note the variable m_target, which is actually a constant, defined using this from within the class declaration:&lt;/p>
+&lt;pre>&lt;code class="language-cpp"> constexpr GLuint target() const {
+switch(DIM) {
+case 1:
+return GL_TEXTURE_1D;
+case 2:
+return GL_TEXTURE_2D;
+case 3:
+return GL_TEXTURE_3D;
+}
+return 0;
+}
+const GLuint m_target = target();
+&lt;/code>&lt;/pre>
+&lt;p>Take a moment to digest this: the function target is actually being executed at &lt;em>compile time&lt;/em>, and this is in fact an example of &lt;a href="https://en.wikipedia.org/wiki/Template_metaprogramming">template metaprogramming&lt;/a> (albeit, a rather simple one). The keyword constexpr allows this function to be executed in setting a constant at compile time. The use of the switch statement (and using multiple return statements in a function) is only allowable in C++14 or better (a simple if-else structure would remove this dependency).&lt;/p>
+&lt;p>The function which copies the data to the GPU is pretty straightforward:&lt;/p>
+&lt;pre>&lt;code class="language-cpp">template &amp;lt;size_t DIM&amp;gt;
+void NoiseTexture&amp;lt;DIM&amp;gt;::copyTextureDataToGPU(GLfloat *data) {
+// Transfer this data to our texture
+glGenTextures(1, &amp;amp;m_texID);
+glBindTexture(m_target, m_texID);
+// Repeat the texture for coordinates &amp;lt;0 or &amp;gt;1
+...
+// Use blending when texels are bigger or smaller than pixels
+...
+// Upload the texture data to the GPU
+switch(DIM) {
+case 1:
+glTexImage1D(m_target, // Target
+0, // Level
+GL_RGB, // Internal Format
+m_res, // width
+0, // border
+GL_RGB, // format
+GL_FLOAT, // type
+data);
+break;
+case 2:
+...
+case 3:
+...
+}
+}
+&lt;/code>&lt;/pre>
+&lt;p>Note that template specialisms could have been used here for the different TexImage calls, but due to the duplication of the texture parameters I decided against it.&lt;/p>
+&lt;h3 id="deriving-your-own-noise-texture-class">Deriving your own Noise Texture class&lt;/h3>
+&lt;p>The simplest example of a derived noise texture class is one which just sets the values in the data block to 1. This is demonstrated in testnoisetexture.h:&lt;/p>
+&lt;pre>&lt;code class="language-cpp">template&amp;lt;size_t DIM&amp;gt;
+class TestNoiseTexture : public NoiseTexture&amp;lt;DIM&amp;gt; {
+public:
+/// Constructor
+explicit TestNoiseTexture(float /*lower*/ = 0.0f,
+float /*upper*/ = 1.0f,
+size_t /*resolution*/ = 64);
+/// Dtor
+~TestNoiseTexture() {}
+protected:
+/// Specialisation of this class to generate pure white noise
+inline GLfloat generator_func(const typename NoiseTexture&amp;lt;DIM&amp;gt;::CoordinateArrayf &amp;amp;);
+};
+template&amp;lt;size_t DIM&amp;gt;
+TestNoiseTexture&amp;lt;DIM&amp;gt;::TestNoiseTexture(float _lower,
+float _upper,
+size_t _resolution)
+: NoiseTexture&amp;lt;DIM&amp;gt;(_lower,_upper,_resolution) {}
+template&amp;lt;size_t DIM&amp;gt;
+inline GLfloat TestNoiseTexture&amp;lt;DIM&amp;gt;::generator_func(const typename NoiseTexture&amp;lt;DIM&amp;gt;::CoordinateArrayf &amp;amp;coord) {
+return 1.0f;
+}
+&lt;/code>&lt;/pre>
+&lt;p>As you see above, all you need to do here is override the virtual generator_func with your own favourite noise generator. See the whitenoisetexture.h example for something a little more interesting. I&amp;rsquo;ll be looking to write a post about how this method was used to create the wood shader soon.&lt;/p>
+&lt;h3 id="downloads">Downloads&lt;/h3>
+&lt;p>Download the source files for these here:&lt;/p>
+&lt;ul>
+&lt;li>&lt;a href="noisetexture.h">noisetexture.h&lt;/a>&lt;/li>
+&lt;li>&lt;a href="testnoisetexture.h">testnoisetexture.h&lt;/a>&lt;/li>
+&lt;li>&lt;a href="whitenoisetexture.h">whitenoisetexture.h&lt;/a>&lt;/li>
+&lt;/ul></description></item><item><title>n-Dimensional Moving Least Squares projection</title><link>https://rsouthern.github.io/post/mls/</link><pubDate>Fri, 01 Apr 2016 00:00:00 +0000</pubDate><guid>https://rsouthern.github.io/post/mls/</guid><description>&lt;h3 id="background">Background&lt;/h3>
+&lt;p>Continuing with the theme of nD implementations of useful algorithms, here is my take on &lt;a href="https://en.wikipedia.org/wiki/Moving_least_squares">Moving Least Squares (MLS)&lt;/a>, a popular method used in engineering and graphics applications for smoothing out noisy point cloud data. Possibly data sources include laser scans, depth sensors (e.g. Kinect) or the like.&lt;/p>
+&lt;p>The basic principle of MLS projection is that you have a &lt;em>noisy point cloud&lt;/em> approximating a &lt;em>surface&lt;/em>. Projection means we&amp;rsquo;re going to take a point from anywhere in space and project it on this surface approximation. We will conveniently also get a surface normal for free as a result of doing this.&lt;/p>
+&lt;h3 id="the-basic-algorithm">The Basic Algorithm&lt;/h3>
+&lt;p>I&amp;rsquo;ll describe the projection algorithm with reference to the following figures:&lt;/p>
+&lt;table width=100%>
+&lt;tr>
+&lt;td>&lt;img width=100% src="mlsproject1.svg"/>&lt;/td>
+&lt;td>&lt;img width=100% src="mlsproject2.svg"/>&lt;/td>
+&lt;td>&lt;img width=100% src="mlsproject3.svg"/>&lt;/td>
+&lt;/tr>
+&lt;/table>
+We are given the original query site \\(q_0)\in\mathbb{R}^n\\) (the red point) and the existing point cloud consisting of points \\(x_i \in \mathbb{R}^n\\) (the black points) (note I'm going to use the indices of the query site and the point cloud differently - the index of \\(q\\) refers to the iteration number of the algorith, the index of \\(x\\) will refer to index of the nearby points). We are also given some query radius \\(r\\) which will contain all the points of interest. Note that the choice of \\(r\\) has a significant effect on the smoothness of the function - this will probably be a topic of discussion for a later post. In the images from right to left:
+1. Identify all the points within the query radius \\(r\\) of \\(q_0\\), i.e. the set of points \\(\\{x_i : \\|x_i - q_0\\| &lt; r\\}\\)
+2. Construct a *best-fit plane* through these points by using a weighted least squares method (more on this later). Then *project* \\(q_0\\) onto this plane to find our next query point \\(q_1\\).
+3. Iterate and continue until two consecutive steps of the projection result in very similar points, i.e. within some \\(\epsilon\\) which is some small error tolerance.
+&lt;p>This is pretty trivially demonstrated using a code snippet from the implementation. In this example &lt;em>cpt&lt;/em> is the current point (e.g. the iterating projected point \(q_j\)), &lt;em>tol&lt;/em> is some user specified tolerance (equivalent to \(\epsilon\)). The rest should mostly be self-explanatory:&lt;/p>
+&lt;pre>&lt;code class="language-cpp"> // Continue this loop until we're close enough to the surface
+while (err &amp;gt; tol) {
+// Perform a least squares projection from the current point onto a best
+// fit hyperplane. The result will tell us if any neighbours were found.
+if (weightedLS(cpt, radius, plane, idxDist) == 0) {
+// What should we do here? throw an error?
+return cpt;
+}
+// If it all went well, we'll have a plane onto which the point can be projected
+tmp = plane.projection(cpt);
+// Our error is just the distance between the input point and our current point
+err = (tmp-cpt).norm();
+// Update our current point to the projected point
+cpt = tmp;
+}
+// If it all went well, we can assume our current point is the best one available
+return cpt;
+&lt;/code>&lt;/pre>
+&lt;p>Note that the function weightedLS() returns the number of points found within the query radius, and modifies the plane to contain the best fit plan through the points. If nothing was found within the radius there is a question of what you should do. Increasing the radius size is an obvious choice, but there may be continuity issues in the query data set.&lt;/p>
+&lt;h3 id="weighted-least-squares">Weighted Least Squares&lt;/h3>
+&lt;p>So it is now important to drill down into the Weighted Least Squares fit function. There are some pretty useful references on everyones favourite academic source &lt;a href="https://en.wikipedia.org/wiki/Least_squares#Weighted_least_squares">here&lt;/a>. There is a much broader discussion here to be had about linear regression for fitting curves to polynomials, but I&amp;rsquo;ll restrict myself to the planar case.&lt;/p>
+&lt;p>The general implicit form for a plane $$\mathbf{n}\cdot(x - x_0)=0,$$ where \(\mathbf{n}\) is a normal to the plane (bold because it is a vector), and \(x_0\) is a point through which the plane passes. So the plane is defined by any point \(x\) for which the above function evaluates to exactly \(0\).&lt;/p>
+&lt;p>If the number of points is equal to the dimensionality the space it is easy enough to find the normal from the input points. For example, the normal to a vector
+$$
+\mathbf{v}= \left[ \begin{array}\ x_1 - x_0 \\ y_1 - y_0 \end{array} \right]
+$$
+between two points in \(\mathbb{R}^2\) is \((-v_y,v_x)\), for higher dimensions use the cross or wedge product.&lt;/p>
+&lt;blockquote>
+&lt;p>As an aside, you might be interested to know that this can also be solved by solving for the &lt;em>null space&lt;/em> of the system of equations given by \(\mathbf{n}\cdot(x - x_0)=0\) - recall that this system is underdetermined because one of the points provided will be \(x_0\). In \(\mathbb{R}^2\), this will be the equivalent of solving for the &lt;em>null space&lt;/em> of
+$$
+\begin{array}\&lt;br>
+\mathbf{n} \cdot \mathbf{v} = 0\&lt;br>
+n_x v_x + n_y v_y = 0
+\end{array}
+$$
+which is of course only non-trivially true when \(\mathbf{n} = (-\mathbf{v}_y,\mathbf{v}_x)\).&lt;/p>
+&lt;/blockquote>
+&lt;p>Note that we can also solve for the normal using the formula \(\mathbf{n}\cdot(x - x_0)=\alpha\) where \(\alpha\) is some arbitrary scalar as the normal is the same if we shifted it along the normal direction. This allows us to formulate the problem into a linear system
+$$X\textbf{n}=\textbf{b},$$
+where \(X\) is the matrix of known points on the plane, \(\mathbf{n}\) is the unknown plane normal, and \(\mathbf{b}\) is some constant vector made up of \(\alpha\)&amp;lsquo;s. For simplicity let&amp;rsquo;s just let \(\alpha=1\) from now on. This is well defined if \(X\) is square, i.e. there are the same number of points as there are dimensions - this is because these points form a &lt;a href="https://en.wikipedia.org/wiki/Simplex">n-simplex&lt;/a> in \(\mathbb{R}^n\).&lt;/p>
+&lt;p>Ok, now what happens if we have more points than dimensions? In this case, we can solve this in the &lt;em>least squares sense&lt;/em>. This is essentially an optimisation problem, solved using the Moore-Penrose &lt;a href="https://en.wikipedia.org/wiki/Least_squares">pseudoinverse&lt;/a>. While there is buckets to write about this, it boils down to premultiplying both sides of the equation by \(X^T\) yielding
+$$X^T X \mathbf{n} = X^T \mathbf{b}.$$
+Note that \(X^T X\) is now a square matrix, the system can be solved and has a unique solution. The solution itself is optimal in a least-squares sense, meaning that it &lt;em>minimizes the sum of the squares of the errors made in the results of each equation&lt;/em>. Or put another way, it spreads the error love evenly between all of the point contributors to the plane.&lt;/p>
+&lt;p>Now applying weights to this should actually be quite straightforward: we&amp;rsquo;ll create some diagonal matrix of weights \(W\) where elements on the diagonal represent the amount we want to &lt;em>weight the error&lt;/em> of each point in \(X\). So a smaller weight would mean that in a least squares sense we are consider the error to be less important. This is incorporated into the system above as follows:
+$$X^T W X \mathbf{n} = X^T W \mathbf{b}.$$
+If we&amp;rsquo;re trying to write our plane equation as \(\mathbf{n}\cdot x = d\) where \(d\) is a constant, a property of the above process is that \(d=1 / |\mathbf{n}| \). Also you must still normalise the resultant normal, e.g. \(\mathbf{n} = \mathbf{n}d\). Note that this whole process works in any dimension - pretty neat.&lt;/p>
+&lt;p>There is also the small issue of how to decide on the weights. Any kernel function would do, and each will have an impact on the overall quality of the reconstruction. Currently I&amp;rsquo;m just inverting the distance, but this could lead to problems when the point is exactly on top of the query point. Other choices of kernel function, such as \(\exp({-s^2})\). Some experimentation depending on application will probably be required.&lt;/p>
+&lt;p>Here is the implementation of this in &lt;em>pointcloud.hpp&lt;/em>:&lt;/p>
+&lt;pre>&lt;code class="language-cpp"> if (m_index.findNeighbors(results, pt.data(), nanoflann::SearchParams())) {
+// Weights matrix
+MatrixXr W(idxDist.size(), idxDist.size()); W.setZero();
+// The matrix of the actual points
+MatrixXr K(idxDist.size(), DIM);
+// The result of the call is true if a neighbour could be found
+typename ResultsVector::iterator it;
+int i,j;
+for (it = idxDist.begin(), i=0; it != idxDist.end(); ++it,++i) {
+// First check to see if this evaluates to 0 exactly (BAD)
+if ((*it).second == REAL(0)) {
+// Set the weight to half the max REAL value (risky)
+W(i,i) = std::numeric_limits&amp;lt;REAL&amp;gt;::max() * REAL(0.5);
+} else {
+// Set the weight to the inverse distance
+W(i,i) = 1.0 / (*it).second;
+}
+// Build the matrix K out of the point data
+for (j=0;j&amp;lt;DIM;++j) K(i,j) = m_data[(*it).first][j];
+}
+// Normalise the weights to make sure they sum to 1
+W = W / W.sum();
+// Now solve the system using the following formula from MATLAB
+// N' = (K'*diag(W)*K) \ (K')*diag(W)*(-ones(size(I,1),1));
+// d = 1/norm(N);
+// N = N' * d;
+VectorDr ans;
+MatrixXr A = K.transpose() * W * K;
+VectorDr b = -K.transpose() * W.diagonal();
+ans = A.llt().solve(b);
+REAL d = REAL(1) / ans.norm();
+Hyperplane _h(ans * d, d);
+h = _h;
+// For the results structure to be useful we need it to store the weights from W, so
+// we copy these back into it
+for (it = idxDist.begin(), i=0; it != idxDist.end(); ++it,++i) {
+(*it).second = W(i,i);
+}
+// We return the number of effective matches
+return idxDist.size();
+} else {
+// No neighbours found! What do we do?
+return 0;
+}
+&lt;/code>&lt;/pre>
+&lt;p>The general dimensional hyperplane is managed by &lt;a href="http://eigen.tuxfamily.org/dox/classEigen_1_1Hyperplane.html">Eigen::Hyperplane&lt;/a> which allows us to do projections (see previous code snippet). Note that the solver used is Eigen&amp;rsquo;s Cholesky solver, which is very fast by requires a matrix that is symmetric positive definite. Fortunately our matrix \(X^T W X\) has these properties. In practice it is very unwise to solve systems like \(A\textbf{x}=\textbf{b}\) by inverting \(A\).&lt;/p>
+&lt;h3 id="implementation-details">Implementation details&lt;/h3>
+&lt;p>The plan was to make this implementation general dimensional, and this has been achieved through liberal use of templates.&lt;/p>
+&lt;pre>&lt;code class="language-cpp">template &amp;lt;typename REAL, unsigned int DIM&amp;gt;
+class PointCloud {
+&lt;/code>&lt;/pre>
+&lt;p>The top of our class says that we&amp;rsquo;re allowing you to choose your type to represent the data (called REAL) and the dimension of the data set, which can be anything you like. As mentioned previously, Eigen provides general dimensional hyperplane routines which makes our lives relatively simple.&lt;/p>
+&lt;p>Unfortunately as you may have realised from the above algorithm the performance is largely dependent on how quickly we can find all the points within a given radius. This is resolved using a &lt;a href="https://en.wikipedia.org/wiki/K-d_tree">KD tree&lt;/a>, which essentially organises the points into a graph structure for fast searching. I&amp;rsquo;m not going to discuss the specifics of KD tree construction and querying - there are plenty of other links to help you with this. I chose to make use of &lt;a href="https://github.com/jlblancoc/nanoflann">nanoflann&lt;/a> from Jose Luis Blanco-Claraco as it is a header only library making it easier to incorporate into the project build.&lt;/p>
+&lt;p>One issue which may seem non-obvious is that I have added the KD tree index object as a member of the PointCloud class:&lt;/p>
+&lt;pre>&lt;code class="language-cpp"> /// A KDTreeIndex type
+typedef nanoflann::KDTreeSingleIndexAdaptor&amp;lt;
+nanoflann::L2_Simple_Adaptor&amp;lt;REAL, PointCloud&amp;lt;REAL,DIM&amp;gt; &amp;gt; ,
+PointCloud&amp;lt;REAL,DIM&amp;gt;,
+DIM&amp;gt; KDTreeIndex;
+/// A KDTree structure
+KDTreeIndex m_index;
+&lt;/code>&lt;/pre>
+&lt;p>This means that the KDTreeIndex is incorporated into the PointCloud class, although as you can see from the typedef above the PointCloud is a template parameter for the index itself. This is because the class which is passed to nanoflann needs to have a set of functions (all with the prefix kdtree_) which will be called during kd tree construction and querying, for example:&lt;/p>
+&lt;pre>&lt;code class="language-cpp"> /// Returns the dim'th component of the idx'th point in the class (random point access)
+inline REAL kdtree_get_pt(const size_t idx, int dim) const {
+return m_data[idx][dim];
+}
+&lt;/code>&lt;/pre>
+&lt;p>The way this works is that we pass &lt;strong>this&lt;/strong> object when we construct the KDTreeIndex, e.g.&lt;/p>
+&lt;pre>&lt;code class="language-cpp">/**
+* Build an empty point cloud with an empty KDTree.
+*/
+template &amp;lt;typename REAL, unsigned int DIM&amp;gt;
+PointCloud&amp;lt;REAL,DIM&amp;gt;::PointCloud()
+: m_index(DIM, *this, nanoflann::KDTreeSingleIndexAdaptorParams(10)) {
+}
+&lt;/code>&lt;/pre>
+&lt;p>It is an interesting and rather twisting compositional arrangement, but it allows us to make sure that all the elements relevent to the point cloud in one convenient place.&lt;/p>
+&lt;p>Another interesting trick of nanoflann compatibility is the fact that I&amp;rsquo;m storing my points in Eigen, while nanoflann needs to compute distances using data stored in pointers to REAL&amp;rsquo;s. Rather than constructing a new Eigen point and copy data across, we can make use of the &lt;a href="http://eigen.tuxfamily.org/dox/classEigen_1_1Map.html">Eigen::Map&lt;/a> which will just make a vector out of the existing memory rather than copying it across, hopefully saving us a couple of clocks:&lt;/p>
+&lt;pre>&lt;code class="language-cpp"> /// Returns the distance between the vector &amp;quot;p1[0:size-1]&amp;quot; and the data point with index &amp;quot;idx_p2&amp;quot; stored in the class:
+inline REAL kdtree_distance(const REAL *p1_data, const size_t idx_p2, size_t size) const {
+Eigen::Map&amp;lt;const PointType&amp;gt; p1_map(p1_data,DIM);
+return (m_data[idx_p2] - p1_map).norm();
+}
+&lt;/code>&lt;/pre>
+&lt;h3 id="conclusions">Conclusions&lt;/h3>
+&lt;p>Currently the examples of using this code are pretty spartan as it is going to be incorporate into a significantly larger project. However, there are a couple of important things to note about this implementation:&lt;/p>
+&lt;ol>
+&lt;li>The choice of radius has a significant impact on the projection. In previous implementations I&amp;rsquo;ve geometrically scaled the radius until some points are found and then scaled it back after the first projection. However, this may have continuity implications. I&amp;rsquo;ve also used a precomputed smooth scalar field of radii to use for this projection to ensure that you have a constant number of neighbours - something I&amp;rsquo;ll be experimenting with in the future.&lt;/li>
+&lt;li>There are a couple of implementation issues I still need to resolve, such as the choice of weight function and how to handle the situation when there are no neighbours in the specificed radius (see above). There is also the relationship between the radius and the cell size of the KD Tree which needs to be resolved. And some nice 3D examples!&lt;/li>
+&lt;li>The process of using MLS projection to smooth input data (called &lt;em>mollification&lt;/em>) was not discussed, but will hopefully be appended to this post at some point. The process is pretty simple: project each point in the existing set onto other points in the same set. This has some interesting performance considerations to doing it correctly (for example, the KD Tree will need to be rebuilt in each iteration).&lt;/li>
+&lt;li>Parallelism! There are a couple of things which could be done in parallel, especially if we&amp;rsquo;re doing mollification.&lt;/li>
+&lt;/ol>
+&lt;h3 id="downloads">Downloads&lt;/h3>
+&lt;p>The source code is hosted on &lt;a href="https://github.com/rsouthern/Examples">GitHub&lt;/a>. Clone it from the repository using the following command from your console:&lt;/p>
+&lt;pre>&lt;code class="language-shell">git clone https://github.com/rsouthern/Examples
+&lt;/code>&lt;/pre></description></item><item><title>NCCA Student Project broadcast on CNNi</title><link>https://rsouthern.github.io/post/cnn/</link><pubDate>Fri, 18 Mar 2016 00:00:00 +0000</pubDate><guid>https://rsouthern.github.io/post/cnn/</guid><description>&lt;p>A team of mainly 2nd year students have put together a short 45 second
+animation for CNNi as part of their &amp;ldquo;Visionaries 2020&amp;rdquo; project, to be
+broadcast worldwide from 18 March 2016, and then to appear on their
+website for several months.
+&lt;img src="city.jpg" alt="CNN Project">&lt;/p>
+&lt;p>I think from the attached images you&amp;rsquo;ll agree that this is an
+accomplished and beautiful piece, and given a last minute change
+of the submission deadline by CNN they fact that they were still
+able to deliver on time (alongside their other coursework) is
+remarkable.&lt;/p>
+&lt;p>You can link directly to the animation on the CNN page &lt;a href="http://money.cnn.com/video/technology/2016/03/15/julia-greer-nanotechnology.cnnmoney/index.html">[here]&lt;/a>.&lt;/p>
+&lt;p>Congratulations to the team!
+&lt;img src="TeamJAMI.jpg" alt="Team JAMI">&lt;/p>
+&lt;h4 id="team-jami">Team JAMI:&lt;/h4>
+&lt;ul>
+&lt;li>Niya Gaydarova,&lt;/li>
+&lt;li>Adele Olsauskaite,&lt;/li>
+&lt;li>Chun You,&lt;/li>
+&lt;li>Kristine Olgaard,&lt;/li>
+&lt;li>Enno Schluender,&lt;/li>
+&lt;li>Kyran Bishop,&lt;/li>
+&lt;li>Paris Jones,&lt;/li>
+&lt;li>Liz Peach and&lt;/li>
+&lt;li>Chester Sampson&lt;/li>
+&lt;/ul></description></item><item><title>The Rebuttal - Writing a robust defence of a journal submission</title><link>https://rsouthern.github.io/post/rebuttal/</link><pubDate>Mon, 07 Dec 2015 00:00:00 +0000</pubDate><guid>https://rsouthern.github.io/post/rebuttal/</guid><description>&lt;p>I&amp;rsquo;ve had a fair amount of experience in negotiating a publication out of largely negative reviews, and also a fair amount of experience in writing reviews for Journal publications. The best guidance I&amp;rsquo;ve read about the process of writing a rebuttal is &lt;a href="http://www.editage.com/insights/how-to-write-a-great-rebuttal-letter">here&lt;/a>, a process which I have unwittingly duplicated over the years. I will, however, attempt to rephrase these points in terms of my personal priorities, and embellish these with examples.&lt;/p>
+&lt;h4 id="introduction">Introduction&lt;/h4>
+&lt;p>It is important to distinguish between the reviewing process of a journal and a Conference: traditionally conference papers have a quick turnaround, and in many disciplines are reviewed purely on a short abstract rather than a full paper. Computer Graphics is an exception: authors are often enticed to attend conferences with the promise that their work will be published in a journal: for this reason full papers are almost always required. The implication of this is that the there is little flexibility - the paper must be publishable or near-publishable in it&amp;rsquo;s submitted form as there is little time to make significant changes. In my opinion, this limits the scope of the rebuttal to the acceptance of minor corrections and clarifications of misunderstandings (which will often still not result in a satisfactory outcome).&lt;/p>
+&lt;p>The type of rebuttal I&amp;rsquo;ll be writing about is one which accompanies a journal paper resubmission, which implies that you&amp;rsquo;ve already managed to get your foot in the door with a reasonably coherent submission. For journal submissions, my experience is that reviewers have the flexibility to &amp;ldquo;take a punt&amp;rdquo; on research that may be under-developed, poorly presented and simply not currently publishable - as long as there is an original idea lurking in the manuscript which could represent a significant contribution. Here is an actual reviewer result from a journal submission:&lt;/p>
+&lt;p class="indented">
+&lt;strong>Recommendation:&lt;/strong> Author Should Prepare A Major Revision For A Second Review
+&lt;br>
+&lt;strong>Comments:&lt;/strong> As mentioned above, I find the combination of ideas in this paper interesting and useful, and I believe that eventually the method will merit publication. However, the paper is poorly written and some recent ﴾and also not so recent﴿ work is omitted and should be discussed.
+&lt;/p>
+You can't get away with that in a SIGGRAPH submission. The reviewer has seen the potential cunningly hidden under the poor presentation, and encouraged me to resubmit for a second review. My opinion of this process is that the reviewer him/herself has actually contributed substantially to the production of this manuscript in identifying the importance and encouraging publication, which is a win for everyone.
+&lt;p>This should set the tone for your rebuttal: you must be both &lt;strong>respectful&lt;/strong> and &lt;strong>authoritative&lt;/strong>:&lt;/p>
+&lt;ul>
+&lt;li>&lt;strong>Respect&lt;/strong> is vital if you want the reviewers to accept a 2nd draft: do not be dismissive of their ignorant or ill-informed remarks. Their discipline area may be quite distant from your own, and their misconceptions may arise from commonly held wisdom in another discipline area - in effect, you might both be correct. If you&amp;rsquo;re rude, it insults both the reviewer (who has put in the time to read and assess your work and is often a prominent researcher in the field) and the editor (who&amp;rsquo;s judgement of reviewer allocation is called into question).&lt;/li>
+&lt;li>&lt;strong>Authority&lt;/strong> is important in establishing your expertise in the area (which you reinforce by using evidence, see below), and also essential for reassuring the editor and reviewers alike that your contribution is going to be significant.&lt;/li>
+&lt;/ul>
+&lt;p>Below I&amp;rsquo;ll go into a little more depth of the process I use of writing a rebuttal.&lt;/p>
+&lt;h4 id="classify-reviewer-comments">Classify reviewer comments&lt;/h4>
+&lt;p>The first and probably most vital thing you&amp;rsquo;ll need to is to actually read the review and identify in bullet points all the specific good &lt;em>and&lt;/em> bad things from each reviewer. Then group together similar points made by different reviewers. As I&amp;rsquo;m ridiculously organised I&amp;rsquo;d often put this in some sort of table indicating the priority, if it is a positive or negative point, which reviewer(s) made the point, and details of the praise / criticism.&lt;/p>
+&lt;div class="row">
+&lt;div class="one column">&lt;strong>Label&lt;/strong>&lt;/div>
+&lt;div class="one column">&lt;strong>Priority&lt;/strong>&lt;/div>
+&lt;div class="one column">&lt;strong>+/-&lt;/strong>&lt;/div>
+&lt;div class="two columns">&lt;strong>Reviewer&lt;/strong>&lt;/div>
+&lt;div class="nine columns">&lt;strong>Comment&lt;/strong>
+&lt;/div>
+&lt;/div>
+&lt;div class="row">
+&lt;div class="one column">C1.3&lt;/div>
+&lt;div class="one column">1&lt;/div>
+&lt;div class="one column">+&lt;/div>
+&lt;div class="two columns">R1,R3&lt;/div>
+&lt;div class="nine columns">"The paper’s general motivation is interesting and I believe strong: combine a deformation model for key‐point
+selection. This as far as I understand has not been tried and seems to be a direction which might be proved fruitful."&lt;/div>
+&lt;/div>
+&lt;div class="row">
+&lt;div class="one column">C3.2&lt;/div>
+&lt;div class="one column">2&lt;/div>
+&lt;div class="one column">-&lt;/div>
+&lt;div class="two columns">R3&lt;/div>
+&lt;div class="nine columns">"I am not convinced that the linear Laplacian model will produce results any different from Meyer and Anderson results in the cited paper."&lt;/div>
+&lt;/div>
+Ranking the priority is important: you should address the concerns of the reviewers in the order of the importance. This should be in the order of *their* perceived importance rather than their own. The clue is in the text - if it says *it would be nice if* is obviously less urgent than *is essential for publication*. However, do not be fooled: you **must address every negative comment made by every reviewer**.
+&lt;p>Grouping similar comments together is going to be very important if you&amp;rsquo;re going to keep to the rebuttal page limit (which is often 5). Some flexibility is often required in grouping together similar but not exactly similar comments. Make sure you address both variants in your rebuttal.&lt;/p>
+&lt;h4 id="construct-your-argument">Construct your argument&lt;/h4>
+&lt;p>A rebuttal, like a paper or grant proposal, must be &lt;em>constructed&lt;/em> rather than simply written. This distinction is vital in the presentation of any argument - particularly if you&amp;rsquo;re in a debate and you don&amp;rsquo;t want to sound like a &lt;a href="https://www.youtube.com/watch?v=ufGlBv8Z3NU">rambling loon&lt;/a>. You will need to construct an argument where you deconstruct and address each negative statement. There are, I suppose, four possible ways to argue a point. In each case, your argument &lt;strong>must&lt;/strong> be evidence based, otherwise it may simply be rejected out of hand.&lt;/p>
+&lt;ol>
+&lt;li>&lt;em>Agree and implement:&lt;/em> you thank the reviewer for the excellent suggestion, and provide a page/line number of where your discussed / implemented this in your paper.&lt;/li>
+&lt;/ol>
+&lt;p class="indented">
+&lt;strong>C6.1: Especially it is not clear how the energy scaling is written for a general system, the expression of $u_{local}$ for energy scaling and time scaling could be given in appendix.&lt;/strong>
+&lt;br>
+&lt;em>On this reviewers recommendation, we have included the expressions for $u_{local}$ in the main text body, and included a substantial appendix in which the local controllers are derived (Appendix B). We feel this is a useful addition to the paper, especially for readers not familiar with the application of Lie group symmetry to dynamic systems.&lt;/em>
+&lt;/p>
+&lt;ol start="2">
+&lt;li>&lt;em>Agree, but argue that it is beyond the scope of the paper.&lt;/em> Reviewers sometimes want it all. Requests can be unreasonable for a single incremental unit of research (i.e. the journal paper). Sometimes a reality check is necessary. This is a difficult argument to make, as it requires to some extent an argument to be made that not only argues for the quality of the results in the paper to be sufficient and representative, but also that the additional work suggested will not add anything substantive to the presentation. Make sure that your argument demonstrates understanding of the subject area, and you provide evidence to justify this point of view. Here are a couple of examples:&lt;/li>
+&lt;/ol>
+&lt;p class="indented">
+&lt;strong>C2.1: The drawback is that the illustration concerns very simple system with a low number of state and the extension of the calculation to the case of a 3D humanoid robot is not trivial. For example the calculation of the basin of attraction for a large system is not obvious. It is often difficult to explain clearly new idea in the case of complex system because the complexity can hid the interest of the strategy, thus this present form is convenient but I would appreciate more detailed calculation in the appendix.&lt;/strong>
+&lt;br>
+&lt;em>We agree that this is an important topic requiring further investigation. Due to limited space we have not discussed the various possible approaches by which this method could be scaled up to more complex systems. In the work of Ames, Gregg and Spong 2007, the complexity is resolved by dividing the system into many components which are coupled together through mechanical coupling. Another approach is to treat additional degrees of freedom as noise and discard them. We do not yet know the best approach, but it will certainly be the subject of future work.&lt;/em>
+&lt;br>&lt;br>
+&lt;strong>C3.3: My main complaint is the vague reference to the actual deformable model used in the paper, and the constant confusion between Laplacian editing, LSmeshes and other (nonlinear) surface representations.&lt;/strong>
+&lt;br>
+&lt;em>This opens up an interesting academic discussion, even if it is about semantics. We have defined Least squares meshes in the introduction as “anchor points and a matrix encoding the differential and topological properties of the surface” (slightly changed from original version), which extends the LS mesh definition of Sorkine and Cohen-Or [5], which is “a planar graph with arbitrary connectivity and a sparse set of control points with geometry”. Effectively, we consider a LS mesh as a form which can be deformed (the representation) using Laplacian mesh editing (the action). Using this definition enables us to use alternative differential operators with our reconstruction. Section 4 has been added to explain what operators are used when and why.&lt;/em>
+&lt;/p>
+&lt;ol start="3">
+&lt;li>&lt;em>Disagree proactively:&lt;/em> This is the situation when the reviewer misunderstands some aspect of your work and do not feel that this needs to be clarified further in your text. You need to phrase your response in a manner that is authoritative but not critical and also must remain respectful of their expertise.&lt;/li>
+&lt;/ol>
+&lt;p class="indented">
+&lt;strong>C3.5: Last paragraph of section A. You wrote that passive dynamic models use significantly lower energy compared with ZMP-based walkers like ASIMO. Lower passive dynamic models have less joints than the ASIMO I believe.&lt;/strong>
+&lt;br>
+&lt;em>The differences in the published numbers of the cost of transport of ZMP robots vs passive dynamic models are quite stark, even taking the number of joints into account. BigDog, for example, uses between 15 and 30 times the amount of energy to the Cornell Ranger, which is still not as efficient as a real human. The lower energy consumption relates to the highly efficient design of the passive walker rather than the number of joints. The passive biped of Collins and Ruina [12] has both knees and arms, and consumes no energy when walking downhill.&lt;/em>
+&lt;/p>
+&lt;ol start="4">
+&lt;li>&lt;em>A dismissive response:&lt;/em> While this should rarely be used, you do occasionally have to respond to a reviewer that may not have read your article, knows nothing about the area, or is being unprofessional in their assessment. I believe that a polite beat-down is required in these cases, establishing the ignorance of the reviewer but also your authority in the irrelevance of their comment. This could be controversial, but I think it may assist the editor in identifying reviewer comments which are simply not worth the time of day. Here are some of my favourites:&lt;/li>
+&lt;/ol>
+&lt;p class="indented">
+&lt;strong>C4.1: There are many claims which are not justified or are incorrect.&lt;/strong>
+&lt;br>
+&lt;em>It is not clear which claims the reviewer is referring to, so we are unable to provide rebuttal or corrections relating to this point.&lt;/em>
+&lt;br>&lt;br>
+&lt;strong>C4.2: There is no demonstration of the system and results are largely anecdotal and unconvincing.&lt;/strong>
+&lt;br>
+&lt;em>We demonstrated our method with 3 different dynamic models. These are not anecdotal, but are genuine dynamic models used to drive and balance existing robots. In addition, we have justified our methodology by evaluating the energy efficiency and the stability of the dynamic system, and by comparison with the motion adaptation strategy of a real human walker.&lt;/em>
+&lt;br>&lt;br>
+&lt;strong>C4.3: The methodology is unclear with no mention of the actual structure of the animated models used and how they are driven.&lt;/strong>
+&lt;br>
+&lt;em>In the Applications section we clearly define the dynamic model for the bouncing ball. The walking model is a modified version of the model of Chen [9], as explained in the
+paper.&lt;/em>
+&lt;/p>
+...and on it goes.
+&lt;h4 id="sources-of-evidence">Sources of Evidence&lt;/h4>
+&lt;p>At the review stage, only the following forms of evidence would really be admissible, in decreasing order of authority:&lt;/p>
+&lt;ol>
+&lt;li>&lt;strong>An existing publication&lt;/strong>: A reputable publication is probably your best form of evidence when refuting a reviewer argument. This might not necessary be from a directly related subject area, any may be outside of the reviewers discipline area. Here&amp;rsquo;s a really good example:&lt;/li>
+&lt;/ol>
+&lt;p class="indented">
+&lt;strong>C3.3: Under Neural Computation, you wrote "This makes it impossible for the neural system to carry out the complex computation necessary for real-time optimisation". Really?&lt;/strong>
+&lt;br>
+&lt;em>This is an agreed hypothesis amongst the biological motor control community. Good references for this are the book by Latash and the paper of Nishikawa et al. This is easy to justify: we observe that animals with very simple neural systems are capable of controlling complex motion. Even flagellates (for example, sperm), a class of very simple organisms are capable of a swimming motion by whipping a flagellum (whip-like tail). However, current work in simulating dynamic models which include muscle actuation using optimisation can take many days on large clusters of computers.&lt;/em>
+&lt;/p>
+2. **A comment from another reviewer**: A good reason to keep positive comments handy is that they can be turned into evidence against another reviewers argument. This is a powerful device for negating a criticism as it plays the reviewers off against each other. Here's a reasonable example:
+&lt;p class="indented">
+&lt;strong>C5.6: Besides, I consider it not necessary to detail so much on the least-squares meshes and Principle Component Analysis in the related work, as they are commonly familiar to the community.&lt;/strong>
+&lt;br>
+&lt;em>These sections were requested by other reviewer(s). They also serve the double purpose of defining terminology used within the paper.&lt;/em>
+&lt;/p>
+3. **Evidence found within your paper**: Your paper is currently under scrutiny to deduce whether it is sufficient for publication. By citing evidence within the paper you are treading a dangerous path, so ensure that your evidence is strong. In most circumstances, it might be a prudent approach to use the reviewers comments to tighten up your evidence, produce additional results etc in order to prove your case.
+4. **Common sense**: I don't think I've ever had to do this. In some guides they recommend that an emotion appeal may be an effective rebuttal strategy, but I would strongly recommend avoiding such an approach for scientific publication.
+&lt;h4 id="the-cover-letter">The Cover Letter&lt;/h4>
+&lt;p>A cover letter (or email or whatever) is a good opportunity to summarise the general trends of the reviewers, and also to possibly address any of the serious reviewer concerns in a respectful manner. I have also used the cover letter as an opportunity to address any outstanding queries which may arise due to conflict between the reviewers, or space issues. Here is an example:&lt;/p>
+&lt;p class="indented">
+We are thankful to the reviewers comments, which are largely very positive and helpful. Many of their comments are very interesting, questioning fundamental assumptions relating to human and synthetic locomotion. These arise from the multi-disciplinary nature of the work, and we have addressed these by referencing work in complimentary disciplines such as motor control, neurobiology and robotics. The substantive changes we have included are:
+&lt;br>&lt;br>
+1. We have provided a full derivation of the expressions for the local controller parameters (Appendix B), as requested by reviewer 5. In addition, these local controllers are included under the relevant application sections in the main text body.
+&lt;br>&lt;br>
+2. We have included an introduction to Lie group symmetry applied to dynamic systems in Appendix A.
+&lt;br>&lt;br>
+3. We have added a figure demonstrating how the ball would bounce without being coupled to a neural oscillator.
+&lt;br>&lt;br>
+It should be noted that amendments to the paper have taken the form of including additional material rather than correcting factual errors. One area of concern is what background needs to be incorporated in a final version to be accessible to the reader. Currently the paper contains an introduction to dynamic systems, which was criticised by Reviewer 1 for being to obvious. Additionally, Reviewer 4 requested a definition of Lie group symmetry, which has necessitated the inclusion of a introduction to the application of Lie group symmetry to differential equations (Appendix A). Depending on space limitations, these sections can be included in the main text, as an appendix, or removed (as adequate references were provided), but they do provide the reader with an accessible and intuitive introduction to these tricky topics, and we hope they can be accommodated in the final text.
+&lt;/p>
+&lt;h4 id="conclusion">Conclusion&lt;/h4>
+&lt;img width=150 align="right" src="https://upload.wikimedia.org/wikipedia/commons/e/ef/Hans_Brinker_Madurodam.jpg">
+In answer to the question "Should I Write a Rebuttal", it is dependent on whether you're able to provide sufficient defence of your article, or are able to revise your article in a manner that meets with the reviewers criteria. I think of writing a paper as trying to plug holes in a dam wall.
+&lt;p>The first thing an author needs to accept is: there are probably always going to be holes - your results might not contain sufficient examples, your comparisons may not be with the absolutely latest work, your method may not be rigorously proven - although you should obviously do your best to minimise these. The secret of writing the paper is to ensure that there are as few holes as possible, so the reviewers are satisfied that you&amp;rsquo;ve done a good enough job. The purpose of the rebuttal is to plug as many of the holes as possible, from largest to smallest. Even if you choose not to submit a rebuttal (I&amp;rsquo;ve been there) I would strongly recommend going through the exercise above anyway to get a better understanding of how you can improve your research.&lt;/p>
+&lt;p>So in summary:&lt;/p>
+&lt;ul>
+&lt;li>Be &lt;strong>respectful&lt;/strong> and &lt;strong>authoritative&lt;/strong> in tone.&lt;/li>
+&lt;li>Read and &lt;strong>classify&lt;/strong> the reviewers comments.&lt;/li>
+&lt;li>Address &lt;strong>every&lt;/strong> negative reviewer comment.&lt;/li>
+&lt;li>Provide &lt;strong>evidence&lt;/strong> in constructing your argument.&lt;/li>
+&lt;li>Provide a broad summary of changes in the &lt;strong>cover letter&lt;/strong>.&lt;/li>
+&lt;/ul></description></item><item><title>Recursive n-dimensional scalar field interpolation</title><link>https://rsouthern.github.io/post/scalarfield/</link><pubDate>Sat, 19 Sep 2015 00:00:00 +0000</pubDate><guid>https://rsouthern.github.io/post/scalarfield/</guid><description>&lt;h3 id="background">Background&lt;/h3>
+&lt;p>Lets say you have a smooth scalar function of any number of variables \(f:\mathbb{R}^n\mapsto\mathbb{R}^1\). Let&amp;rsquo;s assume that the function is computationally expensive to evaluate, but you need to do this at run-time, possibly a lot. Let&amp;rsquo;s also assume that you can define the maximum and minimum range of values which you are interested in. Let&amp;rsquo;s also assume that the function is smooth, and you&amp;rsquo;re tolerant of (or even prefer) the results to be smoothed over.&lt;/p>
+&lt;p>One possible solution is to sample values of the function over a regular grid, and perform some sort of interpolation between the values. So we&amp;rsquo;ll define a different function
+\(g:\mathbb{R}^n\mapsto\mathbb{R}^1,,g\approx f\). Depending on the desired smoothness of the approximation different interpolation functions are feasible, but not all of these generalise to any dimension. One method which does, however, is the &lt;a href="https://en.wikipedia.org/wiki/Centripetal_Catmull%E2%80%93Rom_spline">Catmull-Rom Spline&lt;/a> (co-invented by the CG superhero &lt;a href="https://en.wikipedia.org/wiki/Edwin_Catmull">Ed Catmull&lt;/a>) which can be evaluated recursively on grid edges and exhibits \(C^2\) continuity.&lt;/p>
+&lt;p>I&amp;rsquo;ll explain how this works with the help of this figure, representing a 2D scalar field:&lt;/p>
+&lt;center>&lt;img src="catmullrom_interpolation.svg"/>&lt;/center>
+In this case, we're looking at a function $f:\mathbb{R}^2\mapsto\mathbb{R}^1$ with the value returned by this function visualised as a height above the $(x,y)$ grid in the above image. We assume that the red points are the pre-computed values for $f$ at the corners of the grid cells. Once the cell in which the value to be calculated is identified, 4 Catmull-Rom interpolations are performed in the $y$ direction, to find the green points. One further Catmull-Rom interpolation is needed between these points to compute the final interpolated value (in blue). Note that the number of curves that need to interpolated in each dimension is multiplied by 4 in each step (so on a 3D grid, the first step requires 16 interpolations in the $z$, then 4 in the $y$ and 1 in the $x$). You can see that this process is ripe for recursion. It is also ripe for parallel computation, but that is another story...
+&lt;h3 id="applications">Applications&lt;/h3>
+&lt;p>You might be wondering when you might you want to use an application like this? I developed it in the context of a sparse, high dimensional &lt;a href="https://en.wikipedia.org/wiki/Moving_least_squares">Moving Least Squares&lt;/a> projection: if you are projecting onto a point cloud that is irregular, you need an adaptive, variable radius function in order to ensure that you have sufficient local points on which to project. As it&amp;rsquo;s expensive to compute local neighbours at run time (especially in, say, 66 dimensions) it&amp;rsquo;s probably a good idea to define an approximating smooth function which, given any point in space, returns a radius that will probably contain a desired number of point samples.&lt;/p>
+&lt;h3 id="implementation">Implementation&lt;/h3>
+&lt;p>There are a number of features used in this implementation, which I&amp;rsquo;m going to unpick from the implementation and discuss separately.&lt;/p>
+&lt;h4 id="passing-around-functions">Passing around functions&lt;/h4>
+&lt;p>Fundamental to this process is the ability to evaluate a generic function at a point. It would be very convenient for us to be able to pass said function around as a generic function pointer. For a simple generic function signature, I&amp;rsquo;ll use a function that accepts an array of &lt;em>double&lt;/em>s, and returns a &lt;em>double&lt;/em>. This can be stated using the &lt;a href="http://en.cppreference.com/w/cpp/utility/functional/function">std::function&lt;/a> method:&lt;/p>
+&lt;pre>&lt;code class="language-cpp">std::function&amp;lt;double (double*)&amp;gt; _func;
+&lt;/code>&lt;/pre>
+&lt;p>Note that the type notation is C notation for a function that accepts a pointer to a double, and returns a double. This makes &lt;em>_func&lt;/em> a generic function that can be passed as a parameter - particularly convenient if we&amp;rsquo;re allowing the use of arbitrary input functions. Of course, the return type and array size could be specified as template parameters, but for interaction with existing functions (e.g. libnoise) I&amp;rsquo;ve kept it simple.&lt;/p>
+&lt;h4 id="templates-and-c11">Templates and C++11&lt;/h4>
+&lt;p>I do, however, use templates for the actual ScalarField class. In an early implementation of this structure I just used dynamic arrays of doubles to store the data - but this gives us the overhead of dynamic allocation and deallocation, along with the risks associated with non-contiguous memory. &lt;em>C++11&lt;/em> introduces the &lt;em>std::array&lt;/em>, which is essentially an old skool &lt;em>C&lt;/em> static array, but with all the handy goodness of the STL.&lt;/p>
+&lt;p>This is from the top of the ScalarField class:&lt;/p>
+&lt;pre>&lt;code class="language-cpp">template &amp;lt;uint DIM&amp;gt;
+class ScalarField {
+public:
+/// Unsigned int array
+typedef std::array&amp;lt;uint, DIM&amp;gt; uintArray;
+/// Double array
+typedef std::array&amp;lt;double, DIM&amp;gt; doubleArray;
+&lt;/code>&lt;/pre>
+&lt;p>The template parameter is evaluated at &lt;em>compile time&lt;/em>, generating a template class for the desired dimension. Whenever I create an object of type &lt;em>doubleArray&lt;/em> in the code, this is done statically.&lt;/p>
+&lt;p>Note that I could have given a template parameter for a &lt;em>real type&lt;/em> and an &lt;em>integer type&lt;/em>, but that will add some unnecessary complexity for now.&lt;/p>
+&lt;h4 id="recursive-algorithm">Recursive Algorithm&lt;/h4>
+&lt;p>The core of the algorithm is the construction of the grid and the recursive evaluation of the query point. Fortunately these are reasonably similar. Lets have a look at the init routine:&lt;/p>
+&lt;pre>&lt;code class="language-cpp">/**
+* @brief ScalarField::initialise Inits the scalar field
+* @param _func A boost-ified function declaration which returns the scalar value
+* @param _minValue The minimum values of our given field.
+* @param _maxValue The maximum values of our given field.
+* @param _resolution The resolution of the field in each dimension.
+*/
+template&amp;lt;uint DIM&amp;gt;
+void ScalarField&amp;lt;DIM&amp;gt;::init(std::function&amp;lt;double (double*)&amp;gt; _func,
+const doubleArray &amp;amp;_minValue,
+const doubleArray &amp;amp;_maxValue,
+sconst uintArray&amp;amp; _resolution) {
+// Check we've not been here before already
+if (m_isInit) cleanup();
+// Precompute the partition size in each case
+// Now we can allocate some memory for our data
+// Now for each value in the field we can use the provided function to derive the scalar value
+// this is done recursively (could easily be done in parallel
+doubleArray pos; uintArray idx;
+initRecurse(_func, 0u, idx, pos);
+// Set this to initialised
+m_isInit = true;
+}
+&lt;/code>&lt;/pre>
+&lt;p>Not very much excitement there: we set up the memory and ready ourselves for running the recursive function. The initRecurse function is obviously where the action is - so I&amp;rsquo;ll break it down into stages:&lt;/p>
+&lt;pre>&lt;code class="language-cpp">/**
+* @brief ScalarField::initRecurse Recursively initialise the scalar field along each dimension.
+* @param _func The boostified function to execute to determine the scalar value
+* @param dim The current dimension (start this at 0)
+* @param idx The current index to evaluate (empty when you start)
+* @param pos The position to evaluate (empty when you start)
+*/
+template&amp;lt;uint DIM&amp;gt;
+void ScalarField&amp;lt;DIM&amp;gt;::initRecurse(std::function&amp;lt;double (double*)&amp;gt; _func,
+const uint &amp;amp;dim,
+uintArray &amp;amp;idx,
+doubleArray &amp;amp;pos) {
+&lt;/code>&lt;/pre>
+&lt;p>The prototype reveals a lot about the functionality of the function. The first parameter is the function that we want to call at the grid points. The second parameter is the current dimension. You&amp;rsquo;ll notice from the code above that this starts at &lt;em>0&lt;/em> - each time the function is called, the dimension number will tick up until it gets to the actual dimension, which is our recursion termination criteria. Index and the position values fill up after the recursion unrolls.&lt;/p>
+&lt;pre>&lt;code class="language-cpp"> // At the end of the recursion chain we can calculate the value using the function
+if (dim &amp;gt;= DIM) {
+// First determine the index in the data
+...
+// Now set the value of the data in the right place to the result of the function
+m_data[dataIdx] = _func(&amp;amp;pos[0]);
+return;
+}
+&lt;/code>&lt;/pre>
+&lt;p>At the end of the recursion chain, we evaluate the given function at the position. This isn&amp;rsquo;t straightforward, as I&amp;rsquo;ve stored all the data in a big flat 1D array. However I&amp;rsquo;ve removed the details for simplicity.&lt;/p>
+&lt;p>If the function didn&amp;rsquo;t return, we know that we&amp;rsquo;re not at the end of the chain so we recursively evaluate across each grid dimension:&lt;/p>
+&lt;pre>&lt;code class="language-cpp"> // If we didn't get to the end of the chain, we run another iteration
+for (i = 0 ; i &amp;lt; m_resolution[dim]; ++i) {
+idx[dim] = i;
+pos[dim] = m_minValue[dim] + i * m_partSize[dim];
+initRecurse(_func, dim+1, idx, pos);
+}
+&lt;/code>&lt;/pre>
+&lt;p>In this way, each node in each dimension is initialised with our input function.&lt;/p>
+&lt;p>The evaluation function is a bit more tricky:&lt;/p>
+&lt;pre>&lt;code class="language-cpp">/**
+* @brief ScalarField::eval Evaluate the scalar value at the specified point.
+* @param pt The position at which to evaluate the scalar field
+* @return
+*/
+template&amp;lt;uint DIM&amp;gt;
+double ScalarField&amp;lt;DIM&amp;gt;::eval(const doubleArray&amp;amp; pt) const {
+if (!m_isInit) return 0.0;
+// Determine the index of the bottom corner of the evaluation grid (if outside, extrapolation
+// may be used, so it's capped at the bounds of the grid)
+...
+// Deduce the index of the points from the min, max grid values and total resolution
+...
+// Evaluate the position recursively over all dimensions
+double ret_val = evalRecurse(0, idx, currentIdx, x);
+// Clear memory and return
+return ret_val;
+}
+&lt;/code>&lt;/pre>
+&lt;p>This is largely the same as the &lt;em>init&lt;/em> function above, except that you will need to calculate the bottom corner index of the grid cell in which the query point lives (which is messy, and hidden away).&lt;/p>
+&lt;p>The header for &lt;em>evalRecurse&lt;/em> is more or less the same as &lt;em>initRecurse&lt;/em> so I won&amp;rsquo;t repeat myself. The big difference, of course, is that this function actually returns a value. Here&amp;rsquo;s the termination condition:&lt;/p>
+&lt;pre>&lt;code class="language-cpp"> // The termination condition - just return the scalar value at the specified position
+if (dim &amp;gt;= DIM) {
+// First determine the index in the data
+...
+// Just return the data value at this position!
+return m_data[dataIdx];
+}
+&lt;/code>&lt;/pre>
+&lt;p>This just returns the value at the grid point - this makes more sense in the context of the general condition below:&lt;/p>
+&lt;pre>&lt;code class="language-cpp"> else {
+// Evaluate the catmull rom spline recursively by combining the current indices
+// along all dimensions
+double v0, v1, v2, v3;
+currentIdx[dim] = idx[dim] + 0; v0 = evalRecurse(dim+1, idx, currentIdx, x);
+currentIdx[dim] = idx[dim] + 1; v1 = evalRecurse(dim+1, idx, currentIdx, x);
+currentIdx[dim] = idx[dim] + 2; v2 = evalRecurse(dim+1, idx, currentIdx, x);
+currentIdx[dim] = idx[dim] + 3; v3 = evalRecurse(dim+1, idx, currentIdx, x);
+return catmullRomSpline(x[dim], v0, v1, v2, v3);
+}
+&lt;/code>&lt;/pre>
+&lt;p>So this function spawns 4 different &lt;em>evalRecurse&lt;/em>s for this thread, each one potentially spawning another 4 &lt;em>ad nausium&lt;/em>. The results of each thread re interpolated using our magical &lt;em>catmullRomSpline&lt;/em> function (which is really easy - check the code).&lt;/p>
+&lt;h3 id="conclusions">Conclusions&lt;/h3>
+&lt;p>This is a nice example of an bit of code that is useful for teaching and research: there are a couple of nice &lt;em>C++11&lt;/em>, &lt;em>C++&lt;/em> and &lt;em>C&lt;/em> principles at play which greatly simplify the implementation and improve performance. The research behind it pretty nifty and broadly applicable (I would think).&lt;/p>
+&lt;p>You may have observed that you could use this approach for general dimensional mapping, i.e. $f:\mathbb{R}^n\mapsto\mathbb{R}^m$, assuming that you create &lt;em>m&lt;/em> different ScalarFields. Vector Field intepolation might be more difficult as they will require some recombination function (e.g. normalisation), but not impossible.&lt;/p>
+&lt;p>Parallelism is an obviously missing thing here: in very high dimensional data sets this could prove to be particularly useful - it is essentially a &lt;em>scan-reduce&lt;/em> function. Send me an email if you want this and I can check this out.&lt;/p>
+&lt;h3 id="downloads">Downloads&lt;/h3>
+&lt;p>The source code is hosted on &lt;a href="https://github.com/rsouthern/Examples">GitHub&lt;/a>. Clone it from the repository using the following command from your console:&lt;/p>
+&lt;pre>&lt;code class="language-shell">git clone https://github.com/rsouthern/Examples
+&lt;/code>&lt;/pre></description></item><item><title>A Survival Guide to the Transfer Viva</title><link>https://rsouthern.github.io/post/hypothesis/</link><pubDate>Wed, 01 Jan 2014 00:00:00 +0000</pubDate><guid>https://rsouthern.github.io/post/hypothesis/</guid><description>&lt;p>Note - while this talk was tailored for Engineering Doctoral students, it is equally relevant to PhD study. I woul recommend familiarising yourself with this material well in advance of your transfer exam, ideally shortly after enrolment.&lt;/p>
+&lt;iframe src="//www.slideshare.net/slideshow/embed_code/key/catTX9ogEcxd4Z" width=100% height="485" frameborder="0" marginwidth="0" marginheight="0" scrolling="no" style="border:1px solid #CCC; border-width:1px; margin-bottom:5px; max-width: 100%;" allowfullscreen> &lt;/iframe> &lt;div style="margin-bottom:5px"> &lt;strong> &lt;a href="//www.slideshare.net/RichardSouthern2/a-survival-guide-to-the-transfer-viva" title="A Survival Guide to the Transfer Viva" target="_blank">A Survival Guide to the Transfer Viva&lt;/a> &lt;/strong> from &lt;strong>&lt;a href="https://www.slideshare.net/RichardSouthern2" target="_blank">Richard Southern&lt;/a>&lt;/strong> &lt;/div></description></item><item><title>GPU Accelerated Domain Decomposition</title><link>https://rsouthern.github.io/post/domain/</link><pubDate>Tue, 02 Apr 2013 00:00:00 +0000</pubDate><guid>https://rsouthern.github.io/post/domain/</guid><description>&lt;p>In the real world you often need to solve really big, spatial boundary value problems. There are a couple of examples of this:&lt;/p>
+&lt;ul>
+&lt;li>Solutions to general Partial Differential Equations&lt;/li>
+&lt;li>Finite Element Methods (solving heat equations, antennae simulations, deformation)&lt;/li>
+&lt;li>Fluid Simulations (Eulerian and Legrangian methods)&lt;/li>
+&lt;li>Radial Basis Functions (smooth data interpolation)&lt;/li>
+&lt;/ul>
+&lt;p>The basic form for these systems is often the same. $f(x) = \sum_i q_i \Phi(| x - x_i |)$ where $\Phi(r)$ is some smooth kernel function and $x_i$ is an interpolation center / observation site.&lt;/p>
+&lt;p>The slides for the associated talk are here:&lt;/p>
+&lt;iframe src="//www.slideshare.net/slideshow/embed_code/key/6StmmJ3Ejszchk" width="595" height="485" frameborder="0" marginwidth="0" marginheight="0" scrolling="no" style="border:1px solid #CCC; border-width:1px; margin-bottom:5px; max-width: 100%;" allowfullscreen> &lt;/iframe> &lt;div style="margin-bottom:5px"> &lt;strong> &lt;a href="//www.slideshare.net/RichardSouthern2/gpu-accelerated-domain-decomposition" title="GPU Accelerated Domain Decomposition" target="_blank">GPU Accelerated Domain Decomposition&lt;/a> &lt;/strong> from &lt;strong>&lt;a href="//www.slideshare.net/RichardSouthern2" target="_blank">Richard Southern&lt;/a>&lt;/strong> &lt;/div>
+&lt;p>A rather out of date implementation is available on &lt;a href="http://sourceforge.net/projects/cudasolver/" target="_blank" rel="noopener">Sourceforge&lt;/a>.&lt;/p></description></item><item><title>The Force Density Method - A Brief Introduction</title><link>https://rsouthern.github.io/post/fdm/</link><pubDate>Tue, 01 Feb 2011 00:00:00 +0000</pubDate><guid>https://rsouthern.github.io/post/fdm/</guid><description>&lt;p>The method of force density was developed in response to the need for computational modelling of structures for the Munich Olympic complex [&lt;em>Lewis 2013&lt;/em>] . The method relies on the assumption that the ratio of tension force to length of each cable can be constant, transforming a system of non-linear equations to a set of linear equations which can be solved directly.&lt;/p>
+&lt;p>The Force Density Method (FDM), first introduced by Scheck [&lt;em>1974&lt;/em>], is commonly used in engineering to find the equilibrium shape of a structure consisting of a network of cables with different elasticity properties when stress is applied. While shape analysis of tensile structures is a geometrically non-linear problem, the FDM linearises the form-fitting equations analytically by using the &lt;em>force density ratio&lt;/em> for each cable element, \(q = F/L\), where \(F\) and \(L\) are the force and length of a cable element respectively.&lt;/p>
+&lt;h4 id="the-force-density-method">The Force Density Method&lt;/h4>
+&lt;p>Given the positions of nodes (vertices) which connect the cables (edges) of our network \(V\), the topology of this network is encoded in the &lt;em>branch-node matrix&lt;/em> \(C\). The branch-node matrix of the network above is given by:
+&lt;img src="cmatrix.svg" width=100%/>
+Given a load vector \(R\) and the diagonal matrix of force densities \(Q\), the equilibrium location can be deduced by solving for \(X\) in&lt;/p>
+&lt;p>$$(C^T Q C) X = R.$$&lt;/p>
+&lt;h4 id="embedding">Embedding&lt;/h4>
+&lt;p>In order to use the FDM for 2D embedding, we must be able to constrain nodes on the boundary. For this, the matrix \(C\) is separated into two sub&amp;ndash;matrices: \(C_f\) contains constrained nodes with corresponding position \(X_f\), while \(C\) contains those that are free to move. The problem is reformulated as
+$$(C^T Q C) X = R - (C^T Q C_f)X_f.$$&lt;/p>
+&lt;p>Note that for the purposes of embedding, \(R\) is typically set to zero.&lt;/p>
+&lt;p>The FDM is &lt;em>fold-over free&lt;/em>. This is explained with reference to the following Figure:&lt;/p>
+&lt;center>
+&lt;img src="foldover.svg" width=40%/>
+&lt;/center>
+As the natural rest internal force load of each node is exactly 0, any foldover will result in external forces applied to the nodes which have folded over. As a result it will not be in a state of equilibrium, and this configuration cannot occur.
+&lt;h4 id="stability-under-motion">Stability under motion&lt;/h4>
+&lt;p>The FDM cannot guarantee any of the commonly advocated properties of embeddings in computer graphics, such as &lt;em>isometry&lt;/em> (length preserving) or &lt;em>conformality&lt;/em> (angle preserving). In our application, it is desirable that the path of a vertex or a group of vertices moving across the surface of the shape is mirrored in the embedding. We evaluate this phenomenon by measuring the distortion of these displacement vectors in the embedded space. We call this property &lt;em>stability under motion&lt;/em>.&lt;/p>
+&lt;img src="graph.svg" width=100%/>
+&lt;table>
+&lt;tr>
+&lt;td width=33%>&lt;img width=100% src="harmonic_embed.svg" />&lt;/td>
+&lt;td width=33%>&lt;img width=100% src="mvc_embed.svg" />&lt;/td>
+&lt;td width=33%>&lt;img width=100% src="fdm_embed.svg" />&lt;/td>
+&lt;/tr>
+&lt;/table>
+&lt;p>In the above Figure we compare two popular fixed boundary conformal techniques, Harmonic mappings [&lt;em>Eck at al. 1995&lt;/em>] and Mean Value Coordinates [&lt;em>Floater 2003&lt;/em>] with an FDM network constructed with unit edge forces. The stability under motion of these embedding methods is highly non-linear, and so we evaluate each embedding technique experimentally as follows:&lt;/p>
+&lt;ul>
+&lt;li>Compute the embedding \(\mathcal{U}_0 = \mathsf{embed}\left(\mathcal{M}_0\right)\).&lt;/li>
+&lt;li>Rotate a set of points on the sphere (in this case, one triangle) in a straight path around the surface of the sphere.&lt;/li>
+&lt;li>For each state of the rotation \(\mathcal{M}_i\) compute \(\mathcal{U}_i=\mathsf{embed}\left(\mathcal{M}_i\right)\).&lt;/li>
+&lt;li>Compute the \(n\) displacement vectors in the embedded space. For each \(u_{0,i} \in \mathcal{U}_O\) and \(u_{d,i} \in \mathcal{U}_d\) define \(\mathbf{d}_i\) as the vector between \(u_{0,i}\) and \(u_{d,i}\). Let \( D = \left[\mathbf{d}_1, \ldots , \mathbf{d}_n\right]^T \).&lt;/li>
+&lt;li>We use the angle of the normal cone of these displacement vectors $$\alpha = \max_{i,j} \left(\mathrm{acos}(\mathbf{d}_i \cdot \mathbf{d}_j)\right)$$ as the distortion error. For this experiment, we evaluate the distortion of only the points moving on the surface.&lt;/li>
+&lt;/ul>
+&lt;p>We demonstrated that under all rotations the FDM embedding is stable, even when faces of \(\mathcal{M}_d\) overlap. In addition, there is considerably less displacement of surrounding nodes after rotations.&lt;/p>
+&lt;h4 id="conclusion">Conclusion&lt;/h4>
+&lt;p>I have presented the force density method as a technique to perform mesh embedding using this technique. It is computationally efficient, as it only involves the solution to a sparse linear system, easily solved with the Conjugate Gradient Method or using Cholesky Factorization. I demonstrated that embedding with FDM is very stable, preventing foldover and discontinuities when parameterizing an unstable triangulation. This is particularly useful when, for example, you need to flatten geometry in a stable fashion (for example, see Zhang et al. [2007] and our paper on skin sliding).&lt;/p>
+&lt;h4 id="bibliography">Bibliography&lt;/h4>
+&lt;p>Matthias Eck, Tony DeRose, Tom Duchamp, Hugues Hoppe, Michael Lounsbery, and Werner Stuetzle. Multiresolution analysis of arbitrary meshes. ACM Transactions on Graphics (Proceedings of SIGGRAPH &amp;lsquo;95). 173-182 &lt;a href="http://doi.acm.org/10.1145/218380.218440">doi: 10.1145/218380.218440&lt;/a>.&lt;/p>
+&lt;p>Michael S. Floater, Mean value coordinates, Computer Aided Geometric Design, 20(1):19-27, 2003, ISSN 0167-8396, &lt;a href="http://dx.doi.org/10.1016/S0167-8396(03)00002-5">10.1016/S0167-8396(03)00002-5&lt;/a>.&lt;/p>
+&lt;p>Wanda J. Lewis. Tension Structures: Form and Behaviour. Thomas Telford, illustrated edition, 2003. ISBN 0727732366, 9780727732361.&lt;/p>
+&lt;p>J. H. Schek. The force density method for form finding and computation of general networks. Computer Methods in Applied Mechanics and Engineering, (3):115–134, 1974. &lt;a href="http://dx.doi.org/10.1016/0045-7825(74)90045-0">doi: 10.1016/0045-7825(74)90045-0&lt;/a>&lt;/p>
+&lt;p>Zhang, J. J., Yang, X. and Zhao, Y. (2007), Bar-net driven skinning for character animation. Comp. Anim. Virtual Worlds, 18: 437–446. &lt;a href="http://onlinelibrary.wiley.com/doi/10.1002/cav.211/abstract">doi: 10.1002/cav.211&lt;/a>&lt;/p></description></item><item><title>Compact Elliptical Basis Functions for Surface Reconstruction</title><link>https://rsouthern.github.io/post/ebf/</link><pubDate>Mon, 01 Feb 2010 00:00:00 +0000</pubDate><guid>https://rsouthern.github.io/post/ebf/</guid><description>&lt;p>\(
+\newcommand{\x}{\mathbf{x}}
+\newcommand{\n}{\mathbf{n}}
+\newcommand{\q}{\mathbf{q}}
+\newcommand{\e}{\mathbf{e}}
+\newcommand{\diag}{\mathsf{diag}}
+\newcommand{\khachiyan}{\mathsf{Khachiyan}}
+\newcommand{\flatClust}{\mathsf{flatClust}}
+\newcommand{\kmeans}{\mathit{k}\mathsf{means}}
+\newcommand{\sort}{\mathsf{sort}}
+\newcommand{\tP}{\tilde{P}}
+\newcommand{\idx}{\mathbf{i}}
+\newcommand{\tidx}{\tilde{\idx}}
+\newcommand{\List}{\mathcal{L}}
+\newcommand{\I}{\mathcal{I}}
+\newcommand{\eig}{\mathsf{eig}}
+\)&lt;/p>
+&lt;p>In this post I present a method to reconstruct a surface representation from a a set of EBF&amp;rsquo;s, and in addition present an efficient top-down method to build an EBF representation from a point cloud representation of a surface. I also discuss the advantages and disadvantages of this approach.&lt;/p>
+&lt;p>Radial basis functions (RBFs) are a popular variational representation of volumes and surfaces in computer graphics. In general, an RBF is a real-valued function whose value depends only on the distance from it&amp;rsquo;s center. A special class of these functions have &lt;em>compact support&lt;/em> - in this case the function decays smoothly to zero as the radius approaches 1. In this way, only a relatively small number of RBF&amp;rsquo;s influence any particular point in space, which in turn greatly improves computational efficiency.&lt;/p>
+&lt;table>
+&lt;tr>
+&lt;td>&lt;img width=50% src="ebf1x.png"/>&lt;/td>
+&lt;td>&lt;img width=50% src="ebf2x.png"/>&lt;/td>
+&lt;/tr>
+&lt;tr>
+&lt;td>&lt;center>(a)&lt;/center>&lt;/td>
+&lt;td>&lt;center>(b)&lt;/center>&lt;/td>
+&lt;/tr>
+&lt;tr>&lt;td colspan=2>&lt;it>On certain features (a), basic radial basis functions are inefficient at capturing the surface properties. In comparison (b), very few elliptical functions would be needed to represent this feature.&lt;/it>&lt;/td>&lt;/tr>
+&lt;/table>
+&lt;p>However, certain features are not best represented by radial basis functions, such as in Figure below. Consider two parallel lines - if they are close enough together, you will need many RBF&amp;rsquo;s in order to ensure that the two features are separated. In comparison, an &lt;em>elliptical&lt;/em> shape can better represent this structure (see figure).&lt;/p>
+&lt;p>In this technical report I present a method to reconstruct a surface representation from a a set of EBF&amp;rsquo;s, and in addition present an efficient top&amp;ndash;down method to build an EBF representation from a point cloud representation of a surface. I also discuss the advantages and disadvantages of this approach.&lt;/p>
+&lt;h2 id="background">Background&lt;/h2>
+&lt;p>The reader is probably familiar with the well known general elliptical form \(x^2 / a^2 + y^2 / b^2 = 1\). This 2D formulation assumes the ellipse is centered at the origin, \(a\) and \(b\) are the lengths of the major and minor axes which are aligned with the Cartesian axes. In general we use the quadratic form for an ellipse
+\(
+Ax^2 + By^2 + Cx + Dy + Exy + F = 1
+\).
+This can be rewritten in quadratic (matrix) form:&lt;/p>
+&lt;p>\begin{equation}
+f(\mathbf{x}) = (\mathbf{x}-\mathbf{q})^T Q (\mathbf{x}-\mathbf{q}) = 1 \label{eq:quadratic}
+\end{equation}&lt;/p>
+&lt;p>for ellipse center \(\mathbf{q}\) and shape matrix \(Q\). Note that for real roots, \(Q\) must be positive semi-definite, i.e. (\(Q = Q^T\) and \(\left\langle x, Qx \right\rangle \geq 0\) for all \(x\in\mathbb{R}^n\)). \(Q\) can be factorized into \(Q=M^TM\).&lt;/p>
+&lt;p>An alternative, more compact formulation is to use homogeneous coordinates \(\hat{\mathbf{x}} = \left[ \mathbf{x}, 1\right]^T\) and combine \(\mathbf{q}\) and \(Q\) into a single matrix with a translational component:
+\begin{equation}
+A = \left[
+\begin{array}{cc}
+Q&amp;amp; 0\\&lt;br>
+-\mathbf{q}&amp;amp; 1
+\end{array}
+\right]
+\end{equation}&lt;/p>
+&lt;p>so that quadratic form becomes the homogeneous form for the ellipsoid.
+\begin{equation}
+f(\hat{\x}) = \hat{\x}^T A \hat{\x} = 1 \label{eq:homogeneous}
+\end{equation}
+In general we refer to the ellipse by the pair \([\q, Q]\). Note that the quadratic and homogeneous forms of the ellipsoid compute the elliptical radius. Note that the volume of an ellipse is given by \(v = \sqrt{\det(Q)}\).&lt;p>&lt;/p>
+&lt;h4 id="radial-basis-functions">Radial Basis Functions&lt;/h4>
+&lt;p>Radial Basis Functions (RBF) provide a simple method to construct smooth implicit surfaces from data of arbitrary dimension. Given a matrix of sample points:
+\(P = \left[\x_1, \dots,\x_n \right]\)
+which we assume are generated by sampling on the smooth implicit surface
+\(
+\hat{f}(\mathbf{x}) = 0
+\),
+we estimate this function using the a standard RBF formulation
+\begin{equation}
+f(\x) = \sum_{\q \in \mathcal{C}} \alpha_i \phi_{\sigma_i} \left(\left\|\x - \q\right\|\right) + \mathbf{b}^T p(\x),
+\label{eq:rbf}
+\end{equation}
+where \(\sigma\) is the local basis function radius for compactly supported RBFs \(\phi_{\sigma}(r) = \phi(r/\sigma)\), \(\phi(r)\) is a radial basis function, \(\mathbf{b}=[\beta_1,\ldots,\beta_{|p(\x)|}]^T\), \(\alpha_i\) and \(\beta_j\) are unknown coefficients and \(p(\x)\) is some polynomial in \(\x\) with \(|p(\x)|\) terms (A good choice for \(p(\x)\) is typically \(\x + 1\)). The set \(\mathcal{C}=\left\{\q_1,\ldots,\q_m\right\}\) contains the chosen (RBF) centers, and for a compact approximation we assume \(m \ll n\).&lt;/p>
+&lt;p>The choice of the basis function \(\phi(r)\) depends on the application - we have used globally supported spline \(\phi(r)=r^2 \log(r)\), near compactly supported Gaussian \(\phi(r)=e^{-r^2}\) and compactly supported Wendland functions [18]
+\begin{equation}
+\phi(r)=(1-r)^4_{+}(4r+1)
+\end{equation}
+Note, the \(f(r)_{+}\) operator ensures positivity, i.e. if \(f(r) \lt 0\) then \(f(r)_{+} = 0\), else \(f(r)_{+} = f(r)\).&lt;/p>
+&lt;p>Dinh and Turk [7] propose the use of the spline formulation of Chen and Suter [6] due to the ability to locally control the smoothness of the resulting surface. This formulation requires two additional smoothness parameters which must currently be chosen in an ad-hoc fashion. As we will define locally anisotropic basis functions, the derivation of locally adaptive variants of \(\phi\) adds an unnecessary layer of complexity that is best avoided.&lt;/p>
+&lt;h4 id="variational-implicit-surface-approximation">Variational Implicit Surface Approximation&lt;/h4>
+&lt;p>RBF&amp;rsquo;s have been used extensively for the interpolation of volumetric data, neural networks and smooth surface approximations [17,3]. For surface approximation, a subset of \(k\) input points are chosen as RBF centers are chosen from the input data \(\mathcal{C}_s\), and \(l\) additional centers are added which are known to be on the exterior of the object \(\mathcal{C}_e\), \(\mathcal{C}=\mathcal{C}_s \cup \mathcal{C}_e\).&lt;/p>
+&lt;p>We use the fact that&lt;/p>
+&lt;p>\begin{equation}
+f(\q) = \left\{
+\begin{array}{rl}
+0,&amp; \q \in \mathcal{C}_s\\\\
+-1,&amp; \q \in \mathcal{C}_e
+\end{array}
+\right.
+\end{equation}&lt;/p>
+&lt;p>in order to evaluate the coefficients \(\alpha_i\) using linear regression. The problem can be stated in matrix form&lt;/p>
+&lt;p>\begin{equation}
+\left[
+\begin{array}{cccc}
+\phi_{1,1}&amp;\cdots&amp;\phi_{1,m}&amp;p(\q_1)\\\\
+\vdots&amp;\ddots&amp;\vdots&amp;\vdots\\\\
+\phi_{m,1}&amp;\cdots&amp;\phi_{m,m}&amp;p(\q_m)\\\\
+p(\q_1)^T&amp;\cdots&amp;p(\q_m)^T&amp;\mathbf{0}
+\end{array}
+\right]
+\left[
+\begin{array}{c}
+\alpha_1\\\\
+\vdots\\\\
+\alpha_{k+l}\\\\
+\mathbf{b}
+\end{array}
+\right]
+=
+\left[
+\begin{array}{c}
+f(\q_1)\\\\
+\vdots\\\\
+f(\q_{k+l})\\\\
+\mathbf{0}
+\end{array}
+\right],
+\end{equation}&lt;/p>
+&lt;p>where \(\phi_{i,j} = \phi_{\sigma_i}(\left|\q_i - \q_j\right|)\). Using the linear system above we can solve for the coefficients \(\alpha_i\) and \(\mathbf{b}\), and using these the implicit surface can be evaluated at any point using the RBF formulation.&lt;/p>
+&lt;p>Defining the locations of external centers \(\mathcal{C}_e\) requires some concept of the orientation of the surface. Often [14,15,17] an associated normal field is assumed. In these cases, an external center \(q_e\) is simply defined in terms of the center on the surface \(\q_s\), \(\q_e\) = \(\q_s\) + \(\psi \n_s\), for some \(\psi &amp;gt; 0\).&lt;/p>
+&lt;h2 id="elliptical-basis-functions">Elliptical basis functions&lt;/h2>
+&lt;center>
+&lt;table width=40% align="right">
+&lt;tr>
+&lt;td width=40%>&lt;center>&lt;img width=100% src="warp.eps.svg"/>&lt;/center>&lt;/td>
+&lt;/tr>
+&lt;tr>
+&lt;td>&lt;it>Anisotropic radial basis functions compute distances in the warped space, computed by applying the transformation matrix M.&lt;/it>&lt;/td>
+&lt;/tr>
+&lt;/table>
+&lt;/center>
+&lt;p>The isotropic behavior of RBF interpolation and resulting smoothness is often not a desirable property. Consider the bunny&amp;rsquo;s ear in the figure. Because a single RBF center with a large \(\sigma_i\) is used to represent the flat part of the ear, the reconstruction does not reproduce this flat region. This problem could be solved by using many smaller centers to encode the flat region, but this can dramatically increase the size of the above linear system, making the problem expensive to solve.&lt;/p>
+&lt;p>For flat oriented regions an &lt;em>ellipse&lt;/em> better approximates shape. Recall that the shape matrix ((Q\) describes the shape of the ellipse. In particular, because \(Q\) is positive semi-definite and symmetric, we can factorize it using singular value decomposition (in MATLAB, \([V, \lambda] = \eig(Q)\), \(M = V \diag(\sqrt{\lambda})V^T\)) to solve it \(Q=M^T M\). In this figure we &lt;em>warp&lt;/em> the input space by transforming the input points using the ellipse shape matrix, i.e. \(\x&amp;rsquo; = M(\x-\q)+\q\). This space warping procedure is a method for local anisotropic interpolation.&lt;/p>
+&lt;h4 id="formulation">Formulation&lt;/h4>
+&lt;p>For an elliptical basis function formulation we define our set of centers as&lt;/p>
+&lt;p>\begin{equation}
+\mathcal{C}=\left\{[\q_1,Q_1,\sigma_1], \ldots, [\q_m,Q_m,\sigma_m]\right\},
+\end{equation}&lt;/p>
+&lt;p>consisting of tuples containing the elliptical information. We can incorporate this local space warping matrix \(M\) in the RBF definition:
+\begin{equation}
+f_k(\x) = \sum_{\q \in \mathcal{C}} \alpha_{i,k} \phi_{\sigma_i} \left(\left|M_k (\x - \q)\right|\right) + \mathbf{b}_k^T p(\x).
+\end{equation}
+Note that we use a subscript \(k\) to denote which transformation function is used. The coefficients must now be computed for each EBF center (and hence each \(M_k\) using the linear system.&lt;/p>
+&lt;p>The problem of locally anisotropic RBF&amp;rsquo;s is resolved using a &lt;em>partition of unity&lt;/em> approach. Loosely speaking, the coefficients \(\alpha_i\) and \(\beta_j\) are deduced for each of the elliptical centers \([\q,Q,\sigma]\in \mathcal{C}\). In order to evaluate an isovalue at some \(\x\), we compute a weight based on the proximity of \(\x\) from each center in the locally warped space. Then, the final isovalue is computed by computing the sum of these locally computed weighted functions.&lt;/p>
+&lt;p>More formally, we compute the isovalue by defining a new combined isosurface function
+\begin{equation}
+g(\x) = \frac{\sum_{k=1}^{m} w_k(\x) f_k(\x)}{\sum_{k=1}^{m} w_k(\x)}
+\label{eq:combined}
+\end{equation}
+with the isosurface at \(g(\x)=0\). By choosing a smooth weight function \(w_k(\x)\) we ensure that the reconstruction results of the combined isosurface function is also smooth. Casciola et al. [4] use the local weight function
+\begin{equation}
+w_k(\x) = \left(\frac{\left(\sigma_k - |M_k(\x - \q_k)|\right)_{+}}{\sigma_k |M_k(\x - \q_k)|}\right)^{\gamma_k},
+\label{eq:weights}
+\end{equation}
+where \(\sigma_k\) is, the region of influence of each local anisotropic center and \(\gamma_k\) is a local regularization exponent. We have used \(\gamma_k=1\) for all our results. Note that \(\sigma_k\) here is used to both scale the radius in the EBF equation and to determine the weights, and is a measurement of the &lt;em>region of influence&lt;/em> of a compact elliptical basis function.&lt;/p>
+&lt;p>So in summary, given a set of elliptical centers \(\mathcal{C}\) consisting of the position \(\q\), shape matrix \(Q\) and radius of influence \(\sigma\) of each center, we construct a variational implicit surface using elliptical basis functions as follows:&lt;/p>
+&lt;ul>
+&lt;li>For &lt;em>each center&lt;/em> \([\q_k,Q_k,\sigma_k]\in\mathcal{C}\), compute the coefficients \(\alpha_{i,k}\), \(\mathbf{b}_k\) using the linear system as a preprocess.&lt;/li>
+&lt;li>For an input point \(\x\), compute each of the weights \(w_k\).&lt;/li>
+&lt;li>Compute \(g(\x)\) using these weights in using the EBF formulation and the combined isosurface function.&lt;/li>
+&lt;/ul>
+&lt;h2 id="building-an-ebf-surface-from-point-data">Building an EBF surface from point data&lt;/h2>
+&lt;p>In this section we focus on the construction of EBF surfaces from point cloud data in any dimension without any shape information, such as surface normals. In order to construct an EBF surface we need a number of components:&lt;/p>
+&lt;ul>
+&lt;li>The elliptical shape properties of each center \(\q_k\) and \(Q_k\),&lt;/li>
+&lt;li>The radius of influence of each center \(\sigma_k\),&lt;/li>
+&lt;li>A normal field for the determination of external centers \(\mathcal{C}_e\), and&lt;/li>
+&lt;li>Some radial basis function \(\phi(r)\).&lt;/li>
+&lt;/ul>
+&lt;p>For our application, we choose the radius of influence arbitrarily as the minimum radius needed to enclose a user specified number of neighboring centers in the warped elliptical space. For the radial basis function \(\phi(r)\) we make use of one of the standard RBF functions, depending on the application. In the following sections we will present a method for geometrically identifying the EBF centers and the the local region of influence for each center, as well as discuss our method to deduce the location and orientation of the elliptical centers.&lt;/p>
+&lt;h4 id="flatness-clustering">Flatness clustering&lt;/h4>
+&lt;/p>Other authors have made use of either randomized [7] or bottom-up [4] approaches to selecting surface centers. Unfortunately these either yield unpredictable results, or are expensive because of the need to compute local curvature information at every input point.&lt;/p>
+&lt;p>&lt;img src="alg1.png" alt="Algorithm for Flatness Clustering">&lt;/p>
+&lt;center>
+&lt;table width=30% align="left">
+&lt;tr>
+&lt;td width=30%>&lt;center>&lt;img width=100% src="bunny3d.png"/>&lt;/center>&lt;/td>
+&lt;/tr>
+&lt;tr>
+&lt;td width=30%>Constructing EBF's over a 3D point cloud.&lt;/td>
+&lt;/tr>
+&lt;/table>
+&lt;/center>
+&lt;p>We define a recursive top-down algorithm for partitioning an input set of points \(P\) into flat regions. Loosely speaking, we compute a minimum volume ellipse from the current list of points and measure the flatness. We measure the &amp;ldquo;flatness&amp;rdquo; by using the ratio of the minimum ellipse axis length over the sum of all elliptical axis lengths, similar to the the method of Luiz et al. [13]. If the surface is not sufficiently flat we subdivide the list of points by using a standard clustering algorithm, and append the results of recursive calls to the same function on each cluster.&lt;/p>
+&lt;p>The \(\flatClust\) algorithm makes use of the Khachiyan method for finding the minimum volume ellipse \(\khachiyan(P, \varepsilon)\), further discussed in the appendix. The eigenanalysis function \(\eig\) returns both the eigenvectors \(V\) and eigenvalues \(\lambda\). \(\kmeans(P,\idx)\) uses the method of Lloyd [12] to cluster only the points in \(P\) with the indices \(\idx\), and returns the set \(\I = \left\{ \tidx_1, \ldots, \tidx_n \right\}\) with each \(\tidx_j\) containing the indices of \(P\) belonging to each of the \(n\) clusters. We have used \(n=2\) for best results, although convergence is often faster when using a larger number of clusters. This approach can easily be applied to 3D data, as in the figure above.&lt;/p>
+&lt;h4 id="consistent-orientation">Consistent orientation&lt;/h4>
+&lt;p>In order to determine the external elliptical centers \(\mathcal{C}_e\) we require a local surface normal \(\n_s\). We can easily deduce an &lt;em>unoriented&lt;/em> normal from the eigenvector of \(Q\) associated with it&amp;rsquo;s smallest eigenvalue.&lt;/p>
+&lt;p>A popular method for orienting these normals is by using the propagation method of Hoppe et al. [9]. In brief, this method constructs a Riemannian graph by defining each normal (tangent plane) as the nodes and edges connecting them are deduced using some proximity metric (in [9] this is the distance between the centers). A cost associated with an edge connecting node \(N_i\) to \(N_j\) is defined as \(1-|\n_i\cdot \n_j|\). The tree is traversed with a minimal spanning tree [16]. Whenever an edge \((i,j)\) is traversed, the orientation of \(\n_i\) is corrected if \(\n_i \cdot \hat{\n}_j \lt 0\), where \(\hat{\n}\) has already been corrected.&lt;/p>
+&lt;p>In order to approximate the Riemannian graph, and thereby reduce the computation time and errors arising from using a minimal spanning tree, we instead determine neighboring centers by using ellipse intersection. Traditional ellipse intersection techniques require computing the roots of a quadratic polynomial, which can be time-consuming to compute numerically.&lt;/p>
+&lt;p>Alfano and Greer [1] present a method to test for the intersection of two ellipses \(A\) and \(B\) (in the homogeneous form). The roots of the intersection can be found by determining \([V,\lambda] = \eig(A^{-1} B)\) and testing eigenvectors associated with non-real or repeated eigenvalues. This approach is easy to implement and very efficient as \(A^{-1}\) can be precomputed for all ellipses.&lt;/p>
+&lt;h4 id="consolidation">Consolidation&lt;/h4>
+&lt;p>Because \(\kmeans\) clustering is not flatness sensitive, flat regions may become fragmented due to this procedure. An additional consolidation step is required to merge neighboring elliptical centers which exhibit the same flatness. We deduce the neighborhood of each ellipse by using the same intersection method described in the section above, and use a simple bottom-up method to combine elliptical centers the elliptical error given by
+\begin{equation}
+\tilde{\varepsilon} = \frac{\hat{\lambda}_d}{\sum_{j=1}^{d} \hat{\lambda}_j}
+\end{equation}
+is less than some user specified tolerance \(\varepsilon\).&lt;/p>
+&lt;h2 id="results">Results&lt;/h2>
+&lt;p>I have applied this method reconstruct the curve silhouette of the bunny model from sample points in 2D. As the compact RBF representation gradually transforms into an EBF representation, the contours sharpens - the best result probably is given in (c). However, note that as the ellipse thins, the internal and external contours deteriate, potentially leading to unpleasant numerical artefacts.&lt;/p>
+&lt;center>
+&lt;table width=80%>
+&lt;tr>
+&lt;td width=33%>&lt;center>&lt;img width=100% src="ebf_0001.eps.svg"/>&lt;/center>&lt;/td>
+&lt;td width=33%>&lt;center>&lt;img width=100% src="ebf_0002.eps.svg"/>&lt;/center>&lt;/td>
+&lt;td width=33%>&lt;center>&lt;img width=100% src="ebf_0003.eps.svg"/>&lt;/center>&lt;/td>
+&lt;/tr>
+&lt;tr>
+&lt;td width=33%>&lt;center>&lt;img width=100% src="contour_0001.eps.svg"/>&lt;/center>&lt;/td>
+&lt;td width=33%>&lt;center>&lt;img width=100% src="contour_0002.eps.svg"/>&lt;/center>&lt;/td>
+&lt;td width=33%>&lt;center>&lt;img width=100% src="contour_0003.eps.svg"/>&lt;/center>&lt;/td>
+&lt;/tr>
+&lt;tr>
+&lt;td width=33%>&lt;center>(a)&lt;/center>&lt;/td>
+&lt;td width=33%>&lt;center>(b)&lt;/center>&lt;/td>
+&lt;td width=33%>&lt;center>(c)&lt;/center>&lt;/td>
+&lt;/tr>
+&lt;tr>
+&lt;td width=33%>&lt;center>&lt;img width=100% src="ebf_0004.eps.svg"/>&lt;/center>&lt;/td>
+&lt;td width=33%>&lt;center>&lt;img width=100% src="ebf_0005.eps.svg"/>&lt;/center>&lt;/td>
+&lt;td width=33%>&lt;center>&lt;img width=100% src="ebf_0006.eps.svg"/>&lt;/center>&lt;/td>
+&lt;/tr>
+&lt;tr>
+&lt;td width=33%>&lt;center>&lt;img width=100% src="contour_0004.eps.svg"/>&lt;/center>&lt;/td>
+&lt;td width=33%>&lt;center>&lt;img width=100% src="contour_0005.eps.svg"/>&lt;/center>&lt;/td>
+&lt;td width=33%>&lt;center>&lt;img width=100% src="contour_0006.eps.svg"/>&lt;/center>&lt;/td>
+&lt;/tr>
+&lt;tr>
+&lt;td width=33%>&lt;center>(d)&lt;/center>&lt;/td>
+&lt;td width=33%>&lt;center>(e)&lt;/center>&lt;/td>
+&lt;td width=33%>&lt;center>(f)&lt;/center>&lt;/td>
+&lt;/tr>
+&lt;tr>
+&lt;td colspan=3>&lt;it>Gradually transforming the compact EBF shape matrices from radial (RBF) to elliptical. From (a) to (c), the sharpening of the resulting contour is clearly visible at the bunny foot. The shape contour begins to deteriorate in (d) to (e), as ellipses that are orthogonal to the surface begin influencing the interior of the shape. In this example, sigma is chosen to include the 10 nearest centers.&lt;/it>&lt;/td>&lt;/tr>
+&lt;/table>
+&lt;/center>
+&lt;h3 id="conclusion">Conclusion&lt;/h3>
+&lt;p>In this technical report I have demonstrated a method to build and represent point set surfaces using a scattered data interpolation technique based on compactly supported elliptical basis functions (EBF&amp;rsquo;s). While the technique has been successfully employed elsewhere in representing volume (and image) data, it&amp;rsquo;s application to surfaces is largely unexplored.&lt;/p>
+&lt;p>While this initial finding does show promise, my suspicion is that this approach has a number of considerable failings:&lt;/p>
+&lt;ul>
+&lt;li>&lt;strong>Computation:&lt;/strong> It is computationally very expensive to solve the variational system for every elliptical basis function - which is the reason for no 3D results being included in this report. I believe that one possible option is to significantly improve the performance of the interpolation if only a limited subset of EBF&amp;rsquo;s are used to represent a shape, in the same way that a Gabor Wavelet filter bank has a limited number of filter orientations. In fact, an interesting idea for future work is to deduce an algorithm that adaptively determines the best orientations of a limited number of EBF&amp;rsquo;s in order to represent the shape.&lt;/li>
+&lt;li>&lt;strong>Accuracy:&lt;/strong> While some of the shapes in the results are promising, I am very concerned about the bottom row - as the EBF thins, the shape of the contour deteriorates significantly, which may cause numerical instabilities when the EBF&amp;rsquo;s are not chosen correctly. How to fit EBF&amp;rsquo;s to a surface without excessive thinning is a difficult problem, and certainly not addressed here.&lt;/li>
+&lt;/ul>
+&lt;h2 id="appendix-minimum-volume-enclosing-ellipse">Appendix: Minimum Volume Enclosing Ellipse&lt;/h2>
+&lt;p>Given \(n\) points \(\x_i,,i=1,\ldots,n\), find the minimum volume enclosing ellipsoid. This is effectively the optimization problem
+\([\min \left[\log\left(\det(Q)\right)\right],,\mathrm{s.t.},,(\x_i - \q)^T Q (\x_i - \q) \leq 1.\)&lt;/p>
+&lt;p>&lt;img src="alg2.png" alt="Algorithm for Minimum Volume Enclosing Ellipse">&lt;/p>
+&lt;p>This problem is solved using the Khachiyan method [11], also known as &lt;em>barycentric coordinate ascent&lt;/em>. This approach finds the barycentric coordinates \(u\) of a center of the ellipse in terms of the input points \(P\) by an iterative algorithm which shifts \(u\) closer to the farthest point from the center \(\q=Pu\). The optimal step-size \(\delta\) is deduced using the method presented by Kachiyan [11]. In the algorithm, \(\e\) is an \(m\)-length vector of ones and \(\e_j\) is the \(j_{th}\) basis vector. This method is typically greatly accelerated by using only the points on the convex hull of \(P\). For this we use the &lt;em>QHull&lt;/em> method [2].&lt;/p>
+&lt;h3 id="references">References&lt;/h3>
+&lt;p>[1] Salvatore Alfano and Meredith L. Greer. Determining if two solid ellipsoids intersect. Journal of Guidance, Control, and Dynamics, 26(1):106–110, 2003.&lt;/p>
+&lt;p>[2] C.B. Barber, D.P. Dobkin, and H.T. Huhdanpaa. The quickhull algorithm for convex hulls. ACM Trans. on Mathematical Software, 22(4):469–483, December 1996. &lt;a href="http://www.qhull.org">http://www.qhull.org&lt;/a>.&lt;/p>
+&lt;p>[3] J. C. Carr, R. K. Beatson, J. B. Cherrie, T. J. Mitchell,W. R. Fright, B. C. McCallum, and T. R. Evans. Reconstruction and representation of 3d objects with radial basis functions. In SIGGRAPH ’01: Proceedings of the 28th annual conference on Computer graphics and interactive techniques, pages 67–76, New York, NY, USA, 2001. ACM. ISBN 1-58113-374-X.&lt;/p>
+&lt;p>[4] G. Casciola, D. Lazzaro, L. B. Montefusco, and S. Morigi. Shape preserving surface reconstruction using locally anisotropic radial basis function interpolants. Comput. Math. Appl., 51(8):1185–1198, 2006. ISSN 0898-1221. doi: &lt;a href="http://dx.doi.org/10.1016/j.camwa.2006.04.002">http://dx.doi.org/10.1016/j.camwa.2006.04.002&lt;/a>.&lt;/p>
+&lt;p>[5] G. Casciola, L. B. Montefusco, and S. Morigi. Edge-driven image interpolation using adaptive anisotropic radial basis functions. J. Math. Imaging Vis., 36(2):125–139, 2010. ISSN 0924-9907. doi: &lt;a href="http://dx.doi.org/10.1007/s10851-009-0176-8">http://dx.doi.org/10.1007/s10851-009-0176-8&lt;/a>.&lt;/p>
+&lt;p>[6] F. Chen and D. Suter. Multiple order laplacian spline — including splines with tension. Technical Report MECSE 1996–5, Dept. of Electrical and Computer Systems Engineering, Monash University, July 1996.&lt;/p>
+&lt;p>[7] Huong Quynh Dinh and Greg Turk. Reconstructing surfaces using anisotropic basis functions. In International Conference on Computer Vision (ICCV) 2001, pages 606–613, 2001.&lt;/p>
+&lt;p>[8] Wei Hong, Neophytos Neophytou, Klaus Mueller, and Arie Kaufman. Constructing 3d elliptical gaussians for irregular data. In Mathematical Foundations of Scientific Visualization, Comp. Graphics, and Massive Data Exploration. Springer-Verlag, 2006.&lt;/p>
+&lt;p>[9] Hugues Hoppe, Tony DeRose, Tom Duchamp, John McDonald, and Werner Stuetzle. Surface reconstruction from unorganized points. In SIGGRAPH ’92: Proceedings of the 19th annual conference on Computer graphics and interactive techniques, pages 71–78, New York, NY, USA, 1992. ACM. ISBN 0-89791-479-1. doi: &lt;a href="http://doi.acm.org/10.1145/133994.134011">http://doi.acm.org/10.1145/133994.134011&lt;/a>.&lt;/p>
+&lt;p>[10] Y. Jang, R. P. Botchen, A. Lauser, D. S. Ebert, K. P. Gaither, and T. Ertl. Enhancing the interactive visualization of procedurally encoded multi–field data with ellipsoidal basis functions. Computer Graphics Forum (Proceedings of Eurographics), 3(25), 2006.&lt;/p>
+&lt;p>[11] Leonid G. Khachiyan. Rounding of polytopes in the real number model of computation. Mathematics of Operations Research, 21(2):307–320, May 1996.&lt;/p>
+&lt;p>[12] S. P. Lloyd. Least square quantization in PCM. IEEE Transactions on Information Theory, 28(2): 129–137, 1982.&lt;/p>
+&lt;p>[13] Boris Mederos Luiz, Luiz Velho, Luiz Henrique, and De Figueiredo. Moving least squares multiresolution surface approximation. In Brazilian Symposium on Computer Graphics and Image Processing SIBGRAPI, 2003.&lt;/p>
+&lt;p>[14] Y. Ohtake, A. Belyaev, M. Alexa, G. Turk, and H. Seidel. Multi-level partition of unity implicits. In Proceedings of SIGGRAPH, pages 463–470, 2003.&lt;/p>
+&lt;p>[15] Y. Ohtake, A. Belyaev, and H. Seidel. 3d scattered data approximation with adaptive compactly supported radial basis functions. In Conf. Shape Modeling and Applications, pages 31–39, 2004.&lt;/p>
+&lt;p>[16] R. C. Prim. Shortest connection networks and some generalizations. Bell System Technical Journal, 36(1):1389–1401, 1957.&lt;/p>
+&lt;p>[17] G. Turk and J. F. O’Brien. Variational implicit surfaces. Technical Report GIT- GVU-99-15, Georgia Institute of Technology, 1999.&lt;/p>
+&lt;p>[18] H.Wendland. Piecewise polynomial, positive definite and compactly supported radial basis functions of minimal degree. In Advances in Computational Mathematics 4, pages 389–396, 1995.&lt;/p></description></item></channel></rss>

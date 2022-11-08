@@ -1,0 +1,155 @@
+<!doctype html><html lang=en-uk><head><meta charset=utf-8><meta name=viewport content="width=device-width,initial-scale=1"><meta http-equiv=x-ua-compatible content="IE=edge"><meta name=generator content="Wowchemy 4.8.0 for Hugo"><meta name=author content="Richard Southern"><meta name=description content="An implementation of an extensible template class in C++ for different types of OpenGL noise. Uses some interesting features other than templates, like constexpr, recursion etc."><link rel=alternate hreflang=en-uk href=https://rsouthern.github.io/post/noisetexture/><link rel=preconnect href=https://fonts.gstatic.com crossorigin><meta name=theme-color content="#2962ff"><script src=../../js/mathjax-config.js></script><link rel=stylesheet href=https://cdnjs.cloudflare.com/ajax/libs/academicons/1.9.0/css/academicons.min.css integrity="sha512-W4yqoT1+8NLkinBLBZko+dFB2ZbHsYLDdr50VElllRcNt2Q4/GSs6u71UHKxB7S6JEMCp5Ve4xjh3eGQl/HRvg==" crossorigin=anonymous><link rel=stylesheet href=https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.14.0/css/all.min.css integrity="sha256-FMvZuGapsJLjouA6k7Eo2lusoAX9i0ShlWFG6qt7SLc=" crossorigin=anonymous><link rel=stylesheet href=https://cdnjs.cloudflare.com/ajax/libs/fancybox/3.5.7/jquery.fancybox.min.css integrity="sha256-Vzbj7sDDS/woiFS3uNKo8eIuni59rjyNGtXfstRzStA=" crossorigin=anonymous><link rel=stylesheet href=https://cdnjs.cloudflare.com/ajax/libs/highlight.js/10.2.0/styles/github.min.css crossorigin=anonymous title=hl-light><link rel=stylesheet href=https://cdnjs.cloudflare.com/ajax/libs/highlight.js/10.2.0/styles/dracula.min.css crossorigin=anonymous title=hl-dark disabled><link rel=stylesheet href=https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/leaflet.min.css integrity="sha512-1xoFisiGdy9nvho8EgXuXvnpR5GAMSjFwp40gSRE3NwdUdIMIKuPa7bqoUhLD0O/5tPNhteAsE5XyyMi5reQVA==" crossorigin=anonymous><script src=https://cdnjs.cloudflare.com/ajax/libs/lazysizes/5.2.2/lazysizes.min.js integrity="sha512-TmDwFLhg3UA4ZG0Eb4MIyT1O1Mb+Oww5kFG0uHqXsdbyZz9DcvYQhKpGgNkamAI6h2lGGZq2X8ftOJvF/XjTUg==" crossorigin=anonymous async></script><script src=https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-chtml.js integrity crossorigin=anonymous async></script><link rel=stylesheet href="https://fonts.googleapis.com/css?family=Lora:400,400i%7CKarla:400,400i,700,700i%7CRoboto+Mono&display=swap"><link rel=stylesheet href=../../css/wowchemy.css><link rel=manifest href=../../index.webmanifest><link rel=icon type=image/png href=../../images/icon_hu0365f2187e15210a9118469a64220edc_142871_32x32_fill_lanczos_center_2.png><link rel=apple-touch-icon type=image/png href=../../images/icon_hu0365f2187e15210a9118469a64220edc_142871_192x192_fill_lanczos_center_2.png><link rel=canonical href=https://rsouthern.github.io/post/noisetexture/><meta property="twitter:card" content="summary_large_image"><meta property="og:site_name" content="Richard's Blog"><meta property="og:url" content="https://rsouthern.github.io/post/noisetexture/"><meta property="og:title" content="A Templated Implementation of Noise Texture | Richard's Blog"><meta property="og:description" content="An implementation of an extensible template class in C++ for different types of OpenGL noise. Uses some interesting features other than templates, like constexpr, recursion etc."><meta property="og:image" content="https://rsouthern.github.io/post/noisetexture/featured.png"><meta property="twitter:image" content="https://rsouthern.github.io/post/noisetexture/featured.png"><meta property="og:locale" content="en-uk"><meta property="article:published_time" content="2016-06-30T00:00:00+00:00"><meta property="article:modified_time" content="2016-06-30T00:00:00+00:00"><script type=application/ld+json>{"@context":"https://schema.org","@type":"BlogPosting","mainEntityOfPage":{"@type":"WebPage","@id":"https://rsouthern.github.io/post/noisetexture/"},"headline":"A Templated Implementation of Noise Texture","image":["https://rsouthern.github.io/post/noisetexture/featured.png"],"datePublished":"2016-06-30T00:00:00Z","dateModified":"2016-06-30T00:00:00Z","author":{"@type":"Person","name":"Richard Southern"},"publisher":{"@type":"Organization","name":"Richard's Blog","logo":{"@type":"ImageObject","url":"https://rsouthern.github.io/images/icon_hu0365f2187e15210a9118469a64220edc_142871_192x192_fill_lanczos_center_2.png"}},"description":"An implementation of an extensible template class in C++ for different types of OpenGL noise. Uses some interesting features other than templates, like constexpr, recursion etc."}</script><title>A Templated Implementation of Noise Texture | Richard's Blog</title></head><body id=top data-spy=scroll data-offset=70 data-target=#TableOfContents><script>window.wcDarkLightEnabled=true;</script><script>const isSiteThemeDark=false;</script><script src=../../js/load-theme.js></script><aside class=search-results id=search><div class=container><section class=search-header><div class="row no-gutters justify-content-between mb-3"><div class=col-6><h1>Search</h1></div><div class="col-6 col-search-close"><a class=js-search href=#><i class="fas fa-times-circle text-muted" aria-hidden=true></i></a></div></div><div id=search-box><input name=q id=search-query placeholder=Search... autocapitalize=off autocomplete=off autocorrect=off spellcheck=false type=search class=form-control></div></section><section class=section-search-results><div id=search-hits></div></section></div></aside><nav class="navbar navbar-expand-lg navbar-light compensate-for-scrollbar" id=navbar-main><div class=container><div class="d-none d-lg-inline-flex"><a class=navbar-brand href=../../>Richard's Blog</a></div><button type=button class=navbar-toggler data-toggle=collapse data-target=#navbar-content aria-controls=navbar aria-expanded=false aria-label="Toggle navigation">
+<span><i class="fas fa-bars"></i></span></button><div class="navbar-brand-mobile-wrapper d-inline-flex d-lg-none"><a class=navbar-brand href=../../>Richard's Blog</a></div><div class="navbar-collapse main-menu-item collapse justify-content-start" id=navbar-content><ul class="navbar-nav d-md-inline-flex"><li class=nav-item><a class=nav-link href=../../#about><span>Home</span></a></li><li class=nav-item><a class=nav-link href=../../#publications><span>Publications</span></a></li><li class=nav-item><a class=nav-link href=../../#posts><span>Posts</span></a></li><li class=nav-item><a class=nav-link href=../../#talks><span>Talks</span></a></li></ul></div><ul class="nav-icons navbar-nav flex-row ml-auto d-flex pl-md-2"><li class=nav-item><a class="nav-link js-search" href=# aria-label=Search><i class="fas fa-search" aria-hidden=true></i></a></li><li class="nav-item dropdown theme-dropdown"><a href=# class=nav-link data-toggle=dropdown aria-haspopup=true><i class="fas fa-moon" aria-hidden=true></i></a><div class=dropdown-menu><a href=# class="dropdown-item js-set-theme-light"><span>Light</span></a>
+<a href=# class="dropdown-item js-set-theme-dark"><span>Dark</span></a>
+<a href=# class="dropdown-item js-set-theme-auto"><span>Automatic</span></a></div></li></ul></div></nav><article class=article><div class="article-container pt-3"><h1>A Templated Implementation of Noise Texture</h1><div class=article-metadata><span class=article-date>Jun 30, 2016</span>
+<span class=middot-divider></span><span class=article-reading-time>6 min read</span></div></div><div class="article-header article-container featured-image-wrapper mt-4 mb-4" style=max-width:500px;max-height:500px><div style=position:relative><img src=../../post/noisetexture/featured.png alt class=featured-image></div></div><div class=article-container><div class=article-style><h3 id=introduction>Introduction</h3><p>The icon for this page was from my attempt to recreate a realtime shader for a varnished woodgrain effect. This approach requires the <a href=http://libnoise.sourceforge.net/examples/textures/>combination of multiple layers</a> of <a href=http://mrl.nyu.edu/~perlin/>Perlin</a> <a href=https://en.wikipedia.org/wiki/Perlin_noise>noise</a>, which is probably infeasible to <a href=https://github.com/ashima/webgl-noise/wiki>generate on the fly within the fragment shader</a> (although I&rsquo;d love to be proven wrong). The generation of the wood grain shader will be saved for another post - in this one I&rsquo;d like to discuss how I implemented a generic C++ template for the initialisation of the &ldquo;general&rdquo; dimensional noise texture on OpenGL.</p><h3 id=the-high-level-interface>The High Level Interface</h3><p>The central idea behind this class was to provide the following generalisations:</p><ol><li><em>General Dimensional Textures</em> - noise textures are typically either 2D or 3D (so you can &ldquo;slice through&rdquo; your material and expect a consistent pattern).</li><li><em>Generic Generator Functions</em> - the function that actually generates the noise must be completely generic.</li></ol><p>For (1) above, this is realised by using a simple template parameter DIM:</p><pre><code class=language-cpp>template &lt;size_t DIM&gt;
+class NoiseTexture
+</code></pre><p>So my interface to creating a 3D texture is something like:</p><pre><code class=language-cpp>	MyNoiseTexture&lt;3&gt; m_noise;
+</code></pre><p>For (2), there were several ways to approach this. I could, for example, have passed a generator function / functor class as a template parameter. This would have required me to create different classes for each type of generation. However there are a couple of reasons why I used inheritance instead of this approach (which could be called the <a href=http://www.bogotobogo.com/DesignPatterns/strategy.php>strategy pattern</a>):</p><ul><li>A function cannot store state, which is need for many noise generators, for example <a href=http://www.boost.org/doc/libs/1_61_0/doc/html/boost_random.html>boost</a> or <a href=http://libnoise.sourceforge.net/index.html>libnoise</a>,</li><li>A functor can store state, but will have the same level of class management and complexity as using inheritance, but more importantly</li><li>I may want to override other parts of the class to support parallel noise generation.</li></ul><p>The interface noisetexture.h provides is to inherit from the base class and override the protected function</p><pre><code class=language-cpp>    /// A generator function to make the process of building noise easy
+    virtual inline GLfloat generator_func(const CoordinateArrayf &amp;) = 0;	
+
+</code></pre><p>This function simply accepts a coordinate in DIM space and returns a floating point value. Note that the NoiseTexture makes use of std::array as it should - this makes sure that this is managed memory rather than pointers. Two different arrays are defined:</p><pre><code class=language-cpp>    /// A static (i.e. not dynamic allocated) vector
+    typedef std::array&lt;size_t,DIM&gt; CoordinateArray;
+    typedef std::array&lt;float, DIM&gt; CoordinateArrayf;
+</code></pre><p>One is for indices and the other for positions. This will be used in the recursive generation of the data block.</p><h3 id=generating-the-data>Generating the data</h3><p>Ultimately the initialisation of the OpenGL texture consists of copying a lump of data from the CPU memory to the GPU memory using a call to glTexImage. The following section of code creates the memory, fills it with data and copies it to the GPU:</p><pre><code class=language-cpp>   // Allocate a slab of data for the stuffing
+    GLfloat *data = (GLfloat*) malloc(sizeof(GLfloat) * pow(m_res,DIM) * 3);
+
+    // Use the recursive function to generate the data recursively
+    CoordinateArray coord;
+    generate_recurse(DIM, coord, data);
+
+    // Copy our data over to the GPU
+    copyTextureDataToGPU(data);
+
+    // Delete our data - it's been copied onto the GPU right?
+    free(data);
+</code></pre><p>Unpicking the memory allocation from left to right:</p><ul><li>sizeof(GLfloat) - the size of an individual value (single precision)</li><li>pow(m_res,DIM) - the size of the block of data is squared/cubed as you would expect</li><li>3 - we need RGB values to copy to the GPU</li></ul><p>Generate_recurse is defined as follows:</p><pre><code class=language-cpp>    /// Recursively generate the data
+    virtual void generate_recurse(const size_t &amp;/*dim*/, const CoordinateArray &amp;/*coord*/, GLfloat */*data*/);
+</code></pre><p>It will recursively evaluate the generator function on each of the different positions in the block of memory and write it to the appropriate index:</p><pre><code class=language-cpp>template &lt;size_t DIM&gt;
+void NoiseTexture&lt;DIM&gt;::generate_recurse(const size_t &amp;d,
+                                         const CoordinateArray&amp; coord,
+                                         GLfloat *data) {
+    size_t dim_length = 1, data_pos = 0, i;
+    CoordinateArrayf coordf, tmp;
+    CoordinateArray ncoord;
+    switch(d) {
+    case 0:
+        // At the end of the recursion chain we can evaluate the noise function
+        for (i=0; i&lt;DIM; ++i) {
+            data_pos += coord[i] * dim_length;
+            dim_length *= m_res;
+            coordf[i] = m_inv_resf * float(coord[i]);
+        }
+        data_pos *= 3;
+
+        // Fill up the data with data defined by the generator_func()
+        for (i=0; i&lt;3; ++i) {
+            tmp = coordf; coordf[i] += 1.0f;
+            data[data_pos + i] = generator_func(coordf);
+        }
+        break;
+    default:
+        // For the rest of the dimensions we recursively call all the remaining coordinates
+        ncoord = coord;
+        for (i=0; i&lt;m_res; ++i) {
+            ncoord[d-1] = i;
+            generate_recurse(d-1, ncoord, data);
+        }
+    }
+}
+</code></pre><p>Note that I have arbitrarily added 1.0f for each of the R, G, B channels to give a bit of a richer data set to play with.</p><h3 id=opengl-integration>OpenGL integration</h3><p>There are a number of standard functions which make this class usable in a GL context. For example, the function to find the texture:</p><pre><code class=language-cpp>template &lt;size_t DIM&gt;
+void NoiseTexture&lt;DIM&gt;::bind() const {
+    if (m_isInit) {
+        glBindTexture(m_target, m_texID);
+        CheckError(&quot;NoiseTexture&lt;DIM&gt;::bind() - glBindTexture()&quot;);
+    }
+}
+</code></pre><p>Note the variable m_target, which is actually a constant, defined using this from within the class declaration:</p><pre><code class=language-cpp>    constexpr GLuint target() const {
+        switch(DIM) {
+        case 1:
+            return GL_TEXTURE_1D;
+        case 2:
+            return GL_TEXTURE_2D;
+        case 3:
+            return GL_TEXTURE_3D;
+        }
+        return 0;
+    }
+    const GLuint m_target = target();
+</code></pre><p>Take a moment to digest this: the function target is actually being executed at <em>compile time</em>, and this is in fact an example of <a href=https://en.wikipedia.org/wiki/Template_metaprogramming>template metaprogramming</a> (albeit, a rather simple one). The keyword constexpr allows this function to be executed in setting a constant at compile time. The use of the switch statement (and using multiple return statements in a function) is only allowable in C++14 or better (a simple if-else structure would remove this dependency).</p><p>The function which copies the data to the GPU is pretty straightforward:</p><pre><code class=language-cpp>template &lt;size_t DIM&gt;
+void NoiseTexture&lt;DIM&gt;::copyTextureDataToGPU(GLfloat *data) {
+    // Transfer this data to our texture
+    glGenTextures(1, &amp;m_texID);
+    glBindTexture(m_target, m_texID);
+
+    // Repeat the texture for coordinates &lt;0 or &gt;1
+    ...
+
+    // Use blending when texels are bigger or smaller than pixels
+    ...
+
+    // Upload the texture data to the GPU
+    switch(DIM) {
+    case 1:
+        glTexImage1D(m_target,      // Target
+                     0,             // Level
+                     GL_RGB,        // Internal Format
+                     m_res,         // width
+                     0,             // border
+                     GL_RGB,        // format
+                     GL_FLOAT,      // type
+                     data);
+        break;
+    case 2:
+	...
+    case 3:
+	...
+    }
+}
+</code></pre><p>Note that template specialisms could have been used here for the different TexImage calls, but due to the duplication of the texture parameters I decided against it.</p><h3 id=deriving-your-own-noise-texture-class>Deriving your own Noise Texture class</h3><p>The simplest example of a derived noise texture class is one which just sets the values in the data block to 1. This is demonstrated in testnoisetexture.h:</p><pre><code class=language-cpp>template&lt;size_t DIM&gt;
+class TestNoiseTexture : public NoiseTexture&lt;DIM&gt; {
+public:
+    /// Constructor
+    explicit TestNoiseTexture(float /*lower*/ = 0.0f,
+                              float /*upper*/ = 1.0f,
+                              size_t /*resolution*/ = 64);
+
+    /// Dtor
+    ~TestNoiseTexture() {}
+
+protected:
+    /// Specialisation of this class to generate pure white noise
+    inline GLfloat generator_func(const typename NoiseTexture&lt;DIM&gt;::CoordinateArrayf &amp;);
+};
+
+template&lt;size_t DIM&gt;
+TestNoiseTexture&lt;DIM&gt;::TestNoiseTexture(float _lower,
+                                          float _upper,
+                                          size_t _resolution)
+    : NoiseTexture&lt;DIM&gt;(_lower,_upper,_resolution) {}
+
+
+template&lt;size_t DIM&gt;
+inline GLfloat TestNoiseTexture&lt;DIM&gt;::generator_func(const typename NoiseTexture&lt;DIM&gt;::CoordinateArrayf &amp;coord) {
+    return 1.0f;
+}
+</code></pre><p>As you see above, all you need to do here is override the virtual generator_func with your own favourite noise generator. See the whitenoisetexture.h example for something a little more interesting. I&rsquo;ll be looking to write a post about how this method was used to create the wood shader soon.</p><h3 id=downloads>Downloads</h3><p>Download the source files for these here:</p><ul><li><a href=noisetexture.h>noisetexture.h</a></li><li><a href=testnoisetexture.h>testnoisetexture.h</a></li><li><a href=whitenoisetexture.h>whitenoisetexture.h</a></li></ul></div><div class=article-tags><a class="badge badge-light" href=../../tag/opengl/>opengl</a>
+<a class="badge badge-light" href=../../tag/rendering/>rendering</a>
+<a class="badge badge-light" href=../../tag/shaders/>shaders</a>
+<a class="badge badge-light" href=../../tag/c-/>c++</a>
+<a class="badge badge-light" href=../../tag/noise/>noise</a></div><div class=share-box aria-hidden=true><ul class=share><li><a href="https://twitter.com/intent/tweet?url=https://rsouthern.github.io/post/noisetexture/&text=A%20Templated%20Implementation%20of%20Noise%20Texture" target=_blank rel=noopener class=share-btn-twitter><i class="fab fa-twitter"></i></a></li><li><a href="https://www.facebook.com/sharer.php?u=https://rsouthern.github.io/post/noisetexture/&t=A%20Templated%20Implementation%20of%20Noise%20Texture" target=_blank rel=noopener class=share-btn-facebook><i class="fab fa-facebook"></i></a></li><li><a href="mailto:?subject=A%20Templated%20Implementation%20of%20Noise%20Texture&body=https://rsouthern.github.io/post/noisetexture/" target=_blank rel=noopener class=share-btn-email><i class="fas fa-envelope"></i></a></li><li><a href="https://www.linkedin.com/shareArticle?url=https://rsouthern.github.io/post/noisetexture/&title=A%20Templated%20Implementation%20of%20Noise%20Texture" target=_blank rel=noopener class=share-btn-linkedin><i class="fab fa-linkedin-in"></i></a></li><li><a href="whatsapp://send?text=A%20Templated%20Implementation%20of%20Noise%20Texture%20https://rsouthern.github.io/post/noisetexture/" target=_blank rel=noopener class=share-btn-whatsapp><i class="fab fa-whatsapp"></i></a></li><li><a href="https://service.weibo.com/share/share.php?url=https://rsouthern.github.io/post/noisetexture/&title=A%20Templated%20Implementation%20of%20Noise%20Texture" target=_blank rel=noopener class=share-btn-weibo><i class="fab fa-weibo"></i></a></li></ul></div><div class="media author-card content-widget-hr"><a href=https://rsouthern.github.io/><img class="avatar mr-3 avatar-circle" src=../../author/richard-southern/avatar_hu8b4b6ae9a405f1b6aee3b6ae457da189_173063_270x270_fill_q90_lanczos_center.jpg alt="Richard Southern"></a><div class=media-body><h5 class=card-title><a href=https://rsouthern.github.io/>Richard Southern</a></h5><h6 class=card-subtitle>Lead Developer</h6><p class=card-text>Leader, Graphics Researcher, Software Engineer</p><ul class=network-icon aria-hidden=true><li><a href=https://github.com/rsouthern target=_blank rel=noopener><i class="fab fa-github"></i></a></li><li><a href=https://www.linkedin.com/in/richard-southern-70289b12/ target=_blank rel=noopener><i class="fab fa-linkedin"></i></a></li><li><a href=../../Downloads/cv.pdf><i class="ai ai-cv"></i></a></li></ul></div></div><div class="article-widget content-widget-hr"><h3>Related</h3><ul><li><a href=../../post/fins/>Realtime Silhouette Rendering with Consistent Geometric Fins</a></li><li><a href=../../post/curv/>Principal Curvature Aligned Anisotropic Shading</a></li><li><a href=../../post/mls/>n-Dimensional Moving Least Squares projection</a></li><li><a href=../../post/scalarfield/>Recursive n-dimensional scalar field interpolation</a></li><li><a href=../../publication/geomorph/>Creation and control of real-time continuous level of detail on programmable graphics hardware</a></li></ul></div></div></article><script src=https://cdnjs.cloudflare.com/ajax/libs/jquery/3.5.1/jquery.min.js integrity="sha256-9/aliU8dGd2tb6OSsuzixeV4y/faTqgFtohetphbbj0=" crossorigin=anonymous></script><script src=https://cdnjs.cloudflare.com/ajax/libs/jquery.imagesloaded/4.1.4/imagesloaded.pkgd.min.js integrity="sha256-lqvxZrPLtfffUl2G/e7szqSvPBILGbwmsGE1MKlOi0Q=" crossorigin=anonymous></script><script src=https://cdnjs.cloudflare.com/ajax/libs/jquery.isotope/3.0.6/isotope.pkgd.min.js integrity="sha256-CBrpuqrMhXwcLLUd5tvQ4euBHCdh7wGlDfNz8vbu/iI=" crossorigin=anonymous></script><script src=https://cdnjs.cloudflare.com/ajax/libs/fancybox/3.5.7/jquery.fancybox.min.js integrity="sha256-yt2kYMy0w8AbtF89WXb2P1rfjcP/HTHLT7097U8Y5b8=" crossorigin=anonymous></script><script src=https://cdnjs.cloudflare.com/ajax/libs/instant.page/5.1.0/instantpage.min.js integrity="sha512-1+qUtKoh9XZW7j+6LhRMAyOrgSQKenQ4mluTR+cvxXjP1Z54RxZuzstR/H9kgPXQsVB8IW7DMDFUJpzLjvhGSQ==" crossorigin=anonymous></script><script src=https://cdnjs.cloudflare.com/ajax/libs/highlight.js/10.2.0/highlight.min.js integrity="sha512-TDKKr+IvoqZnPzc3l35hdjpHD0m+b2EC2SrLEgKDRWpxf2rFCxemkgvJ5kfU48ip+Y+m2XVKyOCD85ybtlZDmw==" crossorigin=anonymous></script><script src=https://cdnjs.cloudflare.com/ajax/libs/highlight.js/10.2.0/languages/r.min.js></script><script src=https://cdnjs.cloudflare.com/ajax/libs/highlight.js/10.2.0/languages/c++.min.js></script><script src=https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/leaflet.min.js integrity="sha512-SeiQaaDh73yrb56sTW/RgVdi/mMqNeM2oBwubFHagc5BkixSpP1fvqF47mKzPGWYSSy4RwbBunrJBQ4Co8fRWA==" crossorigin=anonymous></script><script>const code_highlighting=true;</script><script>const search_config={"indexURI":"/index.json","minLength":1,"threshold":0.3};const i18n={"no_results":"No results found","placeholder":"Search...","results":"results found"};const content_type={'post':"Posts",'project':"Projects",'publication':"Publications",'talk':"Talks",'slides':"Slides"};</script><script id=search-hit-fuse-template type=text/x-template>
+      <div class="search-hit" id="summary-{{key}}">
+      <div class="search-hit-content">
+        <div class="search-hit-name">
+          <a href="{{relpermalink}}">{{title}}</a>
+          <div class="article-metadata search-hit-type">{{type}}</div>
+          <p class="search-hit-description">{{snippet}}</p>
+        </div>
+      </div>
+      </div>
+    </script><script src=https://cdnjs.cloudflare.com/ajax/libs/fuse.js/3.2.1/fuse.min.js integrity="sha256-VzgmKYmhsGNNN4Ph1kMW+BjoYJM2jV5i4IlFoeZA9XI=" crossorigin=anonymous></script><script src=https://cdnjs.cloudflare.com/ajax/libs/mark.js/8.11.1/jquery.mark.min.js integrity="sha256-4HLtjeVgH0eIB3aZ9mLYF6E8oU5chNdjU6p6rrXpl9U=" crossorigin=anonymous></script><script src=../../js/wowchemy.min.4c2bca31150ce93c5a5e43b8a50f22fd.js></script><div class=container><footer class=site-footer><p class=powered-by></p><p class=powered-by>Published with
+<a href=https://wowchemy.com target=_blank rel=noopener>Wowchemy</a> —
+the free, <a href=https://github.com/wowchemy/wowchemy-hugo-modules target=_blank rel=noopener>open source</a> website builder that empowers creators.
+<span class=float-right aria-hidden=true><a href=# class=back-to-top><span class=button_icon><i class="fas fa-chevron-up fa-2x"></i></span></a></span></p></footer></div><div id=modal class="modal fade" role=dialog><div class=modal-dialog><div class=modal-content><div class=modal-header><h5 class=modal-title>Cite</h5><button type=button class=close data-dismiss=modal aria-label=Close>
+<span aria-hidden=true>&#215;</span></button></div><div class=modal-body><pre><code class="tex hljs"></code></pre></div><div class=modal-footer><a class="btn btn-outline-primary my-1 js-copy-cite" href=# target=_blank><i class="fas fa-copy"></i>Copy</a>
+<a class="btn btn-outline-primary my-1 js-download-cite" href=# target=_blank><i class="fas fa-download"></i>Download</a><div id=modal-error></div></div></div></div></div></body></html>

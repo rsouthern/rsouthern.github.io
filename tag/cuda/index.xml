@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes"?><rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom"><channel><title>CUDA | Richard's Blog</title><link>https://rsouthern.github.io/tag/cuda/</link><atom:link href="https://rsouthern.github.io/tag/cuda/index.xml" rel="self" type="application/rss+xml"/><description>CUDA</description><generator>Wowchemy (https://wowchemy.com)</generator><language>en-uk</language><lastBuildDate>Sun, 08 Nov 2015 00:00:00 +0000</lastBuildDate><image><url>https://rsouthern.github.io/images/icon_hu0365f2187e15210a9118469a64220edc_142871_512x512_fill_lanczos_center_2.png</url><title>CUDA</title><link>https://rsouthern.github.io/tag/cuda/</link></image><item><title>Blue Noise Sampling using an SPH-based Method</title><link>https://rsouthern.github.io/publication/sphsampling/</link><pubDate>Sun, 08 Nov 2015 00:00:00 +0000</pubDate><guid>https://rsouthern.github.io/publication/sphsampling/</guid><description>&lt;h4 id="media">Media&lt;/h4>
+&lt;center>
+&lt;iframe src="//www.slideshare.net/slideshow/embed_code/key/fczVYj0kQ9dEFC" width="595" height="485" frameborder="0" marginwidth="0" marginheight="0" scrolling="no" style="border:1px solid #CCC; border-width:1px; margin-bottom:5px; max-width: 100%;" allowfullscreen> &lt;/iframe> &lt;div style="margin-bottom:5px"> &lt;strong> &lt;a href="//www.slideshare.net/RichardSouthern2/blue-noise-sampling-using-an-sphbased-method" title="Blue Noise Sampling using an SPH-based Method" target="_blank">Blue Noise Sampling using an SPH-based Method&lt;/a> &lt;/strong> from &lt;strong>&lt;a href="//www.slideshare.net/RichardSouthern2" target="_blank">Richard Southern&lt;/a>&lt;/strong> &lt;/div>
+&lt;/center>
+&lt;h4 id="source-code">Source Code&lt;/h4>
+&lt;table>
+&lt;tr>
+&lt;td width=50%>
+&lt;img align=left width=100% src="multiclass_icon.png"/>
+An implementation of multiclass sampling using our SPH sampling method. Implemented in C++ in Visual Studio. Windows binary included.
+&lt;a href="../../rsouthern/Downloads/SPH_sampling_multiclass_v1.zip">[Download]&lt;/a>
+&lt;/td>
+&lt;td width=50%>
+&lt;img align=left width=100% src="surface_icon.png"/>
+An implementation of surface sampling using our SPH sampling method. Implemented in C++ in Visual Studio. Windows binary included.
+&lt;a href="../../rsouthern/Downloads/SPH_sampling_surface_v1.zip">[Download]&lt;/a>
+&lt;/td>
+&lt;/tr>
+&lt;/table></description></item><item><title>GPU Accelerated Domain Decomposition</title><link>https://rsouthern.github.io/post/domain/</link><pubDate>Tue, 02 Apr 2013 00:00:00 +0000</pubDate><guid>https://rsouthern.github.io/post/domain/</guid><description>&lt;p>In the real world you often need to solve really big, spatial boundary value problems. There are a couple of examples of this:&lt;/p>
+&lt;ul>
+&lt;li>Solutions to general Partial Differential Equations&lt;/li>
+&lt;li>Finite Element Methods (solving heat equations, antennae simulations, deformation)&lt;/li>
+&lt;li>Fluid Simulations (Eulerian and Legrangian methods)&lt;/li>
+&lt;li>Radial Basis Functions (smooth data interpolation)&lt;/li>
+&lt;/ul>
+&lt;p>The basic form for these systems is often the same. $f(x) = \sum_i q_i \Phi(| x - x_i |)$ where $\Phi(r)$ is some smooth kernel function and $x_i$ is an interpolation center / observation site.&lt;/p>
+&lt;p>The slides for the associated talk are here:&lt;/p>
+&lt;iframe src="//www.slideshare.net/slideshow/embed_code/key/6StmmJ3Ejszchk" width="595" height="485" frameborder="0" marginwidth="0" marginheight="0" scrolling="no" style="border:1px solid #CCC; border-width:1px; margin-bottom:5px; max-width: 100%;" allowfullscreen> &lt;/iframe> &lt;div style="margin-bottom:5px"> &lt;strong> &lt;a href="//www.slideshare.net/RichardSouthern2/gpu-accelerated-domain-decomposition" title="GPU Accelerated Domain Decomposition" target="_blank">GPU Accelerated Domain Decomposition&lt;/a> &lt;/strong> from &lt;strong>&lt;a href="//www.slideshare.net/RichardSouthern2" target="_blank">Richard Southern&lt;/a>&lt;/strong> &lt;/div>
+&lt;p>A rather out of date implementation is available on &lt;a href="http://sourceforge.net/projects/cudasolver/" target="_blank" rel="noopener">Sourceforge&lt;/a>.&lt;/p></description></item><item><title>Creation and control of real-time continuous level of detail on programmable graphics hardware</title><link>https://rsouthern.github.io/publication/geomorph/</link><pubDate>Sat, 01 Mar 2003 00:00:00 +0000</pubDate><guid>https://rsouthern.github.io/publication/geomorph/</guid><description/></item></channel></rss>

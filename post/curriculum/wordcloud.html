@@ -1,0 +1,105 @@
+<html>
+
+<body>
+  <!-- Includes for data loading and visualisation-->
+  <script src="https://d3js.org/d3.v6.js"></script>
+
+
+  <!-- Load d3-cloud -->
+  <script src="https://cdn.jsdelivr.net/gh/holtzy/D3-graph-gallery@master/LIB/d3.layout.cloud.js"></script>
+
+  <!-- Includes to input data from google docs / sheets-->
+  <script src="https://www.gstatic.com/charts/loader.js"></script>
+
+
+  <style>
+    body {
+      background: #EEE;
+      margin: 2px;
+    }
+
+    img {
+      border-radius: 10px;
+      padding: 2px;
+    }
+
+    pre {
+      display: none;
+    }
+
+    p {
+      white-space: pre;
+    }
+  </style>
+
+  <div id="chart"></div>
+
+  <script>
+    google.charts.load('current');
+    google.charts.setOnLoadCallback(init);
+
+    
+
+    function init() {
+      // Load the spreadsheet data using a query
+      //var url = 'https://docs.google.com/spreadsheets/d/11BcByHOP4BhCnN3YeADMSn5qcqP_xR6ODQT9UC6Flmg/gviz/tq?sheet=BAVE'; // BAVE
+      var url = 'https://docs.google.com/spreadsheets/d/11BcByHOP4BhCnN3YeADMSn5qcqP_xR6ODQT9UC6Flmg/gviz/tq?sheet=BACATA'; // BACATA
+      //var url = 'https://docs.google.com/spreadsheets/d/11BcByHOP4BhCnN3YeADMSn5qcqP_xR6ODQT9UC6Flmg/gviz/tq?sheet=BACAAD'; // BACAAD
+      var query = new google.visualization.Query(url);
+      query.setQuery('select *');
+      query.send(processSheetsData);
+    }
+
+    // Process the data from the Google Sheet table
+    function processSheetsData(response) {
+      var gdata = response.getDataTable();
+      var columns = gdata.getNumberOfColumns();
+      var rows = gdata.getNumberOfRows();
+
+      // append column headings
+      var csvData = "";
+      for (var c = 0; c < columns; c++) {
+        csvData += "\"" + gdata.getColumnLabel(c) + "\"";
+        csvData += (c == columns - 1) ? '\n' : ',';
+      }
+      // append row headings
+      for (var r = 0; r < rows; r++) {
+        var mapObj = { colLabels: gdata.getFormattedValue(r, 0) };
+        for (var c = 0; c < columns; c++) {
+          csvData += "\"" + gdata.getFormattedValue(r, c) + "\"";
+          csvData += (c == columns - 1) ? '\n' : ',';
+        }
+      }
+
+      // Use d3 to parse the string as csv data
+      data = d3.csvParse(csvData);
+
+      // The path to our icons
+      var prefix = "/unit_icons/";
+
+      // Our empty words array
+      var keywords = new Array();
+
+      // Iterate over all rows of our d3 data and append keywords to the words array
+      data.forEach(function (d) {
+        // Split the keywords on the comma to create an array of keywords
+        var local_keywords = d['Keywords'].split(",");
+        // Trim off any whitespace
+        local_keywords = local_keywords.map(s => s.trim());
+
+        //local_keywords.forEach(function (kw) { kw = kw.trim(); });
+        // Append these keywords to our "words" array
+        keywords = keywords.concat(local_keywords);
+      });
+      console.log(keywords);
+      // Now all keywords have been built we can display them
+      //draw(keywords);
+    }
+
+
+  </script>
+
+
+</body>
+
+</html>
