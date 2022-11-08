@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes"?><rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom"><channel><title>Jian Chang | Richard's Blog</title><link>https://rsouthern.github.io/author/jian-chang/</link><atom:link href="https://rsouthern.github.io/author/jian-chang/index.xml" rel="self" type="application/rss+xml"/><description>Jian Chang</description><generator>Wowchemy (https://wowchemy.com)</generator><language>en-uk</language><lastBuildDate>Sat, 01 Mar 2014 00:00:00 +0000</lastBuildDate><image><url>https://rsouthern.github.io/images/icon_hu0365f2187e15210a9118469a64220edc_142871_512x512_fill_lanczos_center_2.png</url><title>Jian Chang</title><link>https://rsouthern.github.io/author/jian-chang/</link></image><item><title>Adaptive Motion Synthesis for Virtual Characters - A Survey</title><link>https://rsouthern.github.io/publication/motionsurvey/</link><pubDate>Sat, 01 Mar 2014 00:00:00 +0000</pubDate><guid>https://rsouthern.github.io/publication/motionsurvey/</guid><description/></item><item><title>Automatic cage construction for retargeted muscle fitting</title><link>https://rsouthern.github.io/publication/cagebased/</link><pubDate>Fri, 01 Mar 2013 00:00:00 +0000</pubDate><guid>https://rsouthern.github.io/publication/cagebased/</guid><description>&lt;h4 id="media">Media&lt;/h4>
+&lt;center>
+&lt;iframe width="480" height="320" src="https://www.youtube.com/embed/9uGBFbvoN_4" frameborder="0" allowfullscreen>&lt;/iframe>
+&lt;/center>
+&lt;pre>&lt;code>@article{
+year={2013},
+issn={0178-2789},
+journal={The Visual Computer},
+volume={29},
+number={5},
+doi={10.1007/s00371-012-0739-3},
+title={Automatic cage construction for retargeted muscle fitting},
+url={http://dx.doi.org/10.1007/s00371-012-0739-3},
+publisher={Springer-Verlag},
+keywords={Muscle modelling; Character animation},
+author={Yang, Xiaosong and Chang, Jian and Southern, Richard and Zhang, JianJ.},
+pages={369-380},
+}
+&lt;/code>&lt;/pre></description></item></channel></rss>

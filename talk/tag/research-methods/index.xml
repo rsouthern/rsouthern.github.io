@@ -1,0 +1,135 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes"?><rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom"><channel><title>research methods | Richard's Blog</title><link>https://rsouthern.github.io/tag/research-methods/</link><atom:link href="https://rsouthern.github.io/tag/research-methods/index.xml" rel="self" type="application/rss+xml"/><description>research methods</description><generator>Wowchemy (https://wowchemy.com)</generator><language>en-uk</language><lastBuildDate>Mon, 07 Dec 2015 00:00:00 +0000</lastBuildDate><image><url>https://rsouthern.github.io/images/icon_hu0365f2187e15210a9118469a64220edc_142871_512x512_fill_lanczos_center_2.png</url><title>research methods</title><link>https://rsouthern.github.io/tag/research-methods/</link></image><item><title>The Rebuttal - Writing a robust defence of a journal submission</title><link>https://rsouthern.github.io/post/rebuttal/</link><pubDate>Mon, 07 Dec 2015 00:00:00 +0000</pubDate><guid>https://rsouthern.github.io/post/rebuttal/</guid><description>&lt;p>I&amp;rsquo;ve had a fair amount of experience in negotiating a publication out of largely negative reviews, and also a fair amount of experience in writing reviews for Journal publications. The best guidance I&amp;rsquo;ve read about the process of writing a rebuttal is &lt;a href="http://www.editage.com/insights/how-to-write-a-great-rebuttal-letter">here&lt;/a>, a process which I have unwittingly duplicated over the years. I will, however, attempt to rephrase these points in terms of my personal priorities, and embellish these with examples.&lt;/p>
+&lt;h4 id="introduction">Introduction&lt;/h4>
+&lt;p>It is important to distinguish between the reviewing process of a journal and a Conference: traditionally conference papers have a quick turnaround, and in many disciplines are reviewed purely on a short abstract rather than a full paper. Computer Graphics is an exception: authors are often enticed to attend conferences with the promise that their work will be published in a journal: for this reason full papers are almost always required. The implication of this is that the there is little flexibility - the paper must be publishable or near-publishable in it&amp;rsquo;s submitted form as there is little time to make significant changes. In my opinion, this limits the scope of the rebuttal to the acceptance of minor corrections and clarifications of misunderstandings (which will often still not result in a satisfactory outcome).&lt;/p>
+&lt;p>The type of rebuttal I&amp;rsquo;ll be writing about is one which accompanies a journal paper resubmission, which implies that you&amp;rsquo;ve already managed to get your foot in the door with a reasonably coherent submission. For journal submissions, my experience is that reviewers have the flexibility to &amp;ldquo;take a punt&amp;rdquo; on research that may be under-developed, poorly presented and simply not currently publishable - as long as there is an original idea lurking in the manuscript which could represent a significant contribution. Here is an actual reviewer result from a journal submission:&lt;/p>
+&lt;p class="indented">
+&lt;strong>Recommendation:&lt;/strong> Author Should Prepare A Major Revision For A Second Review
+&lt;br>
+&lt;strong>Comments:&lt;/strong> As mentioned above, I find the combination of ideas in this paper interesting and useful, and I believe that eventually the method will merit publication. However, the paper is poorly written and some recent ﴾and also not so recent﴿ work is omitted and should be discussed.
+&lt;/p>
+You can't get away with that in a SIGGRAPH submission. The reviewer has seen the potential cunningly hidden under the poor presentation, and encouraged me to resubmit for a second review. My opinion of this process is that the reviewer him/herself has actually contributed substantially to the production of this manuscript in identifying the importance and encouraging publication, which is a win for everyone.
+&lt;p>This should set the tone for your rebuttal: you must be both &lt;strong>respectful&lt;/strong> and &lt;strong>authoritative&lt;/strong>:&lt;/p>
+&lt;ul>
+&lt;li>&lt;strong>Respect&lt;/strong> is vital if you want the reviewers to accept a 2nd draft: do not be dismissive of their ignorant or ill-informed remarks. Their discipline area may be quite distant from your own, and their misconceptions may arise from commonly held wisdom in another discipline area - in effect, you might both be correct. If you&amp;rsquo;re rude, it insults both the reviewer (who has put in the time to read and assess your work and is often a prominent researcher in the field) and the editor (who&amp;rsquo;s judgement of reviewer allocation is called into question).&lt;/li>
+&lt;li>&lt;strong>Authority&lt;/strong> is important in establishing your expertise in the area (which you reinforce by using evidence, see below), and also essential for reassuring the editor and reviewers alike that your contribution is going to be significant.&lt;/li>
+&lt;/ul>
+&lt;p>Below I&amp;rsquo;ll go into a little more depth of the process I use of writing a rebuttal.&lt;/p>
+&lt;h4 id="classify-reviewer-comments">Classify reviewer comments&lt;/h4>
+&lt;p>The first and probably most vital thing you&amp;rsquo;ll need to is to actually read the review and identify in bullet points all the specific good &lt;em>and&lt;/em> bad things from each reviewer. Then group together similar points made by different reviewers. As I&amp;rsquo;m ridiculously organised I&amp;rsquo;d often put this in some sort of table indicating the priority, if it is a positive or negative point, which reviewer(s) made the point, and details of the praise / criticism.&lt;/p>
+&lt;div class="row">
+&lt;div class="one column">&lt;strong>Label&lt;/strong>&lt;/div>
+&lt;div class="one column">&lt;strong>Priority&lt;/strong>&lt;/div>
+&lt;div class="one column">&lt;strong>+/-&lt;/strong>&lt;/div>
+&lt;div class="two columns">&lt;strong>Reviewer&lt;/strong>&lt;/div>
+&lt;div class="nine columns">&lt;strong>Comment&lt;/strong>
+&lt;/div>
+&lt;/div>
+&lt;div class="row">
+&lt;div class="one column">C1.3&lt;/div>
+&lt;div class="one column">1&lt;/div>
+&lt;div class="one column">+&lt;/div>
+&lt;div class="two columns">R1,R3&lt;/div>
+&lt;div class="nine columns">"The paper’s general motivation is interesting and I believe strong: combine a deformation model for key‐point
+selection. This as far as I understand has not been tried and seems to be a direction which might be proved fruitful."&lt;/div>
+&lt;/div>
+&lt;div class="row">
+&lt;div class="one column">C3.2&lt;/div>
+&lt;div class="one column">2&lt;/div>
+&lt;div class="one column">-&lt;/div>
+&lt;div class="two columns">R3&lt;/div>
+&lt;div class="nine columns">"I am not convinced that the linear Laplacian model will produce results any different from Meyer and Anderson results in the cited paper."&lt;/div>
+&lt;/div>
+Ranking the priority is important: you should address the concerns of the reviewers in the order of the importance. This should be in the order of *their* perceived importance rather than their own. The clue is in the text - if it says *it would be nice if* is obviously less urgent than *is essential for publication*. However, do not be fooled: you **must address every negative comment made by every reviewer**.
+&lt;p>Grouping similar comments together is going to be very important if you&amp;rsquo;re going to keep to the rebuttal page limit (which is often 5). Some flexibility is often required in grouping together similar but not exactly similar comments. Make sure you address both variants in your rebuttal.&lt;/p>
+&lt;h4 id="construct-your-argument">Construct your argument&lt;/h4>
+&lt;p>A rebuttal, like a paper or grant proposal, must be &lt;em>constructed&lt;/em> rather than simply written. This distinction is vital in the presentation of any argument - particularly if you&amp;rsquo;re in a debate and you don&amp;rsquo;t want to sound like a &lt;a href="https://www.youtube.com/watch?v=ufGlBv8Z3NU">rambling loon&lt;/a>. You will need to construct an argument where you deconstruct and address each negative statement. There are, I suppose, four possible ways to argue a point. In each case, your argument &lt;strong>must&lt;/strong> be evidence based, otherwise it may simply be rejected out of hand.&lt;/p>
+&lt;ol>
+&lt;li>&lt;em>Agree and implement:&lt;/em> you thank the reviewer for the excellent suggestion, and provide a page/line number of where your discussed / implemented this in your paper.&lt;/li>
+&lt;/ol>
+&lt;p class="indented">
+&lt;strong>C6.1: Especially it is not clear how the energy scaling is written for a general system, the expression of $u_{local}$ for energy scaling and time scaling could be given in appendix.&lt;/strong>
+&lt;br>
+&lt;em>On this reviewers recommendation, we have included the expressions for $u_{local}$ in the main text body, and included a substantial appendix in which the local controllers are derived (Appendix B). We feel this is a useful addition to the paper, especially for readers not familiar with the application of Lie group symmetry to dynamic systems.&lt;/em>
+&lt;/p>
+&lt;ol start="2">
+&lt;li>&lt;em>Agree, but argue that it is beyond the scope of the paper.&lt;/em> Reviewers sometimes want it all. Requests can be unreasonable for a single incremental unit of research (i.e. the journal paper). Sometimes a reality check is necessary. This is a difficult argument to make, as it requires to some extent an argument to be made that not only argues for the quality of the results in the paper to be sufficient and representative, but also that the additional work suggested will not add anything substantive to the presentation. Make sure that your argument demonstrates understanding of the subject area, and you provide evidence to justify this point of view. Here are a couple of examples:&lt;/li>
+&lt;/ol>
+&lt;p class="indented">
+&lt;strong>C2.1: The drawback is that the illustration concerns very simple system with a low number of state and the extension of the calculation to the case of a 3D humanoid robot is not trivial. For example the calculation of the basin of attraction for a large system is not obvious. It is often difficult to explain clearly new idea in the case of complex system because the complexity can hid the interest of the strategy, thus this present form is convenient but I would appreciate more detailed calculation in the appendix.&lt;/strong>
+&lt;br>
+&lt;em>We agree that this is an important topic requiring further investigation. Due to limited space we have not discussed the various possible approaches by which this method could be scaled up to more complex systems. In the work of Ames, Gregg and Spong 2007, the complexity is resolved by dividing the system into many components which are coupled together through mechanical coupling. Another approach is to treat additional degrees of freedom as noise and discard them. We do not yet know the best approach, but it will certainly be the subject of future work.&lt;/em>
+&lt;br>&lt;br>
+&lt;strong>C3.3: My main complaint is the vague reference to the actual deformable model used in the paper, and the constant confusion between Laplacian editing, LSmeshes and other (nonlinear) surface representations.&lt;/strong>
+&lt;br>
+&lt;em>This opens up an interesting academic discussion, even if it is about semantics. We have defined Least squares meshes in the introduction as “anchor points and a matrix encoding the differential and topological properties of the surface” (slightly changed from original version), which extends the LS mesh definition of Sorkine and Cohen-Or [5], which is “a planar graph with arbitrary connectivity and a sparse set of control points with geometry”. Effectively, we consider a LS mesh as a form which can be deformed (the representation) using Laplacian mesh editing (the action). Using this definition enables us to use alternative differential operators with our reconstruction. Section 4 has been added to explain what operators are used when and why.&lt;/em>
+&lt;/p>
+&lt;ol start="3">
+&lt;li>&lt;em>Disagree proactively:&lt;/em> This is the situation when the reviewer misunderstands some aspect of your work and do not feel that this needs to be clarified further in your text. You need to phrase your response in a manner that is authoritative but not critical and also must remain respectful of their expertise.&lt;/li>
+&lt;/ol>
+&lt;p class="indented">
+&lt;strong>C3.5: Last paragraph of section A. You wrote that passive dynamic models use significantly lower energy compared with ZMP-based walkers like ASIMO. Lower passive dynamic models have less joints than the ASIMO I believe.&lt;/strong>
+&lt;br>
+&lt;em>The differences in the published numbers of the cost of transport of ZMP robots vs passive dynamic models are quite stark, even taking the number of joints into account. BigDog, for example, uses between 15 and 30 times the amount of energy to the Cornell Ranger, which is still not as efficient as a real human. The lower energy consumption relates to the highly efficient design of the passive walker rather than the number of joints. The passive biped of Collins and Ruina [12] has both knees and arms, and consumes no energy when walking downhill.&lt;/em>
+&lt;/p>
+&lt;ol start="4">
+&lt;li>&lt;em>A dismissive response:&lt;/em> While this should rarely be used, you do occasionally have to respond to a reviewer that may not have read your article, knows nothing about the area, or is being unprofessional in their assessment. I believe that a polite beat-down is required in these cases, establishing the ignorance of the reviewer but also your authority in the irrelevance of their comment. This could be controversial, but I think it may assist the editor in identifying reviewer comments which are simply not worth the time of day. Here are some of my favourites:&lt;/li>
+&lt;/ol>
+&lt;p class="indented">
+&lt;strong>C4.1: There are many claims which are not justified or are incorrect.&lt;/strong>
+&lt;br>
+&lt;em>It is not clear which claims the reviewer is referring to, so we are unable to provide rebuttal or corrections relating to this point.&lt;/em>
+&lt;br>&lt;br>
+&lt;strong>C4.2: There is no demonstration of the system and results are largely anecdotal and unconvincing.&lt;/strong>
+&lt;br>
+&lt;em>We demonstrated our method with 3 different dynamic models. These are not anecdotal, but are genuine dynamic models used to drive and balance existing robots. In addition, we have justified our methodology by evaluating the energy efficiency and the stability of the dynamic system, and by comparison with the motion adaptation strategy of a real human walker.&lt;/em>
+&lt;br>&lt;br>
+&lt;strong>C4.3: The methodology is unclear with no mention of the actual structure of the animated models used and how they are driven.&lt;/strong>
+&lt;br>
+&lt;em>In the Applications section we clearly define the dynamic model for the bouncing ball. The walking model is a modified version of the model of Chen [9], as explained in the
+paper.&lt;/em>
+&lt;/p>
+...and on it goes.
+&lt;h4 id="sources-of-evidence">Sources of Evidence&lt;/h4>
+&lt;p>At the review stage, only the following forms of evidence would really be admissible, in decreasing order of authority:&lt;/p>
+&lt;ol>
+&lt;li>&lt;strong>An existing publication&lt;/strong>: A reputable publication is probably your best form of evidence when refuting a reviewer argument. This might not necessary be from a directly related subject area, any may be outside of the reviewers discipline area. Here&amp;rsquo;s a really good example:&lt;/li>
+&lt;/ol>
+&lt;p class="indented">
+&lt;strong>C3.3: Under Neural Computation, you wrote "This makes it impossible for the neural system to carry out the complex computation necessary for real-time optimisation". Really?&lt;/strong>
+&lt;br>
+&lt;em>This is an agreed hypothesis amongst the biological motor control community. Good references for this are the book by Latash and the paper of Nishikawa et al. This is easy to justify: we observe that animals with very simple neural systems are capable of controlling complex motion. Even flagellates (for example, sperm), a class of very simple organisms are capable of a swimming motion by whipping a flagellum (whip-like tail). However, current work in simulating dynamic models which include muscle actuation using optimisation can take many days on large clusters of computers.&lt;/em>
+&lt;/p>
+2. **A comment from another reviewer**: A good reason to keep positive comments handy is that they can be turned into evidence against another reviewers argument. This is a powerful device for negating a criticism as it plays the reviewers off against each other. Here's a reasonable example:
+&lt;p class="indented">
+&lt;strong>C5.6: Besides, I consider it not necessary to detail so much on the least-squares meshes and Principle Component Analysis in the related work, as they are commonly familiar to the community.&lt;/strong>
+&lt;br>
+&lt;em>These sections were requested by other reviewer(s). They also serve the double purpose of defining terminology used within the paper.&lt;/em>
+&lt;/p>
+3. **Evidence found within your paper**: Your paper is currently under scrutiny to deduce whether it is sufficient for publication. By citing evidence within the paper you are treading a dangerous path, so ensure that your evidence is strong. In most circumstances, it might be a prudent approach to use the reviewers comments to tighten up your evidence, produce additional results etc in order to prove your case.
+4. **Common sense**: I don't think I've ever had to do this. In some guides they recommend that an emotion appeal may be an effective rebuttal strategy, but I would strongly recommend avoiding such an approach for scientific publication.
+&lt;h4 id="the-cover-letter">The Cover Letter&lt;/h4>
+&lt;p>A cover letter (or email or whatever) is a good opportunity to summarise the general trends of the reviewers, and also to possibly address any of the serious reviewer concerns in a respectful manner. I have also used the cover letter as an opportunity to address any outstanding queries which may arise due to conflict between the reviewers, or space issues. Here is an example:&lt;/p>
+&lt;p class="indented">
+We are thankful to the reviewers comments, which are largely very positive and helpful. Many of their comments are very interesting, questioning fundamental assumptions relating to human and synthetic locomotion. These arise from the multi-disciplinary nature of the work, and we have addressed these by referencing work in complimentary disciplines such as motor control, neurobiology and robotics. The substantive changes we have included are:
+&lt;br>&lt;br>
+1. We have provided a full derivation of the expressions for the local controller parameters (Appendix B), as requested by reviewer 5. In addition, these local controllers are included under the relevant application sections in the main text body.
+&lt;br>&lt;br>
+2. We have included an introduction to Lie group symmetry applied to dynamic systems in Appendix A.
+&lt;br>&lt;br>
+3. We have added a figure demonstrating how the ball would bounce without being coupled to a neural oscillator.
+&lt;br>&lt;br>
+It should be noted that amendments to the paper have taken the form of including additional material rather than correcting factual errors. One area of concern is what background needs to be incorporated in a final version to be accessible to the reader. Currently the paper contains an introduction to dynamic systems, which was criticised by Reviewer 1 for being to obvious. Additionally, Reviewer 4 requested a definition of Lie group symmetry, which has necessitated the inclusion of a introduction to the application of Lie group symmetry to differential equations (Appendix A). Depending on space limitations, these sections can be included in the main text, as an appendix, or removed (as adequate references were provided), but they do provide the reader with an accessible and intuitive introduction to these tricky topics, and we hope they can be accommodated in the final text.
+&lt;/p>
+&lt;h4 id="conclusion">Conclusion&lt;/h4>
+&lt;img width=150 align="right" src="https://upload.wikimedia.org/wikipedia/commons/e/ef/Hans_Brinker_Madurodam.jpg">
+In answer to the question "Should I Write a Rebuttal", it is dependent on whether you're able to provide sufficient defence of your article, or are able to revise your article in a manner that meets with the reviewers criteria. I think of writing a paper as trying to plug holes in a dam wall.
+&lt;p>The first thing an author needs to accept is: there are probably always going to be holes - your results might not contain sufficient examples, your comparisons may not be with the absolutely latest work, your method may not be rigorously proven - although you should obviously do your best to minimise these. The secret of writing the paper is to ensure that there are as few holes as possible, so the reviewers are satisfied that you&amp;rsquo;ve done a good enough job. The purpose of the rebuttal is to plug as many of the holes as possible, from largest to smallest. Even if you choose not to submit a rebuttal (I&amp;rsquo;ve been there) I would strongly recommend going through the exercise above anyway to get a better understanding of how you can improve your research.&lt;/p>
+&lt;p>So in summary:&lt;/p>
+&lt;ul>
+&lt;li>Be &lt;strong>respectful&lt;/strong> and &lt;strong>authoritative&lt;/strong> in tone.&lt;/li>
+&lt;li>Read and &lt;strong>classify&lt;/strong> the reviewers comments.&lt;/li>
+&lt;li>Address &lt;strong>every&lt;/strong> negative reviewer comment.&lt;/li>
+&lt;li>Provide &lt;strong>evidence&lt;/strong> in constructing your argument.&lt;/li>
+&lt;li>Provide a broad summary of changes in the &lt;strong>cover letter&lt;/strong>.&lt;/li>
+&lt;/ul></description></item><item><title>A Survival Guide to the Transfer Viva</title><link>https://rsouthern.github.io/post/hypothesis/</link><pubDate>Wed, 01 Jan 2014 00:00:00 +0000</pubDate><guid>https://rsouthern.github.io/post/hypothesis/</guid><description>&lt;p>Note - while this talk was tailored for Engineering Doctoral students, it is equally relevant to PhD study. I woul recommend familiarising yourself with this material well in advance of your transfer exam, ideally shortly after enrolment.&lt;/p>
+&lt;iframe src="//www.slideshare.net/slideshow/embed_code/key/catTX9ogEcxd4Z" width=100% height="485" frameborder="0" marginwidth="0" marginheight="0" scrolling="no" style="border:1px solid #CCC; border-width:1px; margin-bottom:5px; max-width: 100%;" allowfullscreen> &lt;/iframe> &lt;div style="margin-bottom:5px"> &lt;strong> &lt;a href="//www.slideshare.net/RichardSouthern2/a-survival-guide-to-the-transfer-viva" title="A Survival Guide to the Transfer Viva" target="_blank">A Survival Guide to the Transfer Viva&lt;/a> &lt;/strong> from &lt;strong>&lt;a href="https://www.slideshare.net/RichardSouthern2" target="_blank">Richard Southern&lt;/a>&lt;/strong> &lt;/div></description></item></channel></rss>

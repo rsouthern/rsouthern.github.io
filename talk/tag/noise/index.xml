@@ -1,0 +1,175 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes"?><rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom"><channel><title>noise | Richard's Blog</title><link>https://rsouthern.github.io/tag/noise/</link><atom:link href="https://rsouthern.github.io/tag/noise/index.xml" rel="self" type="application/rss+xml"/><description>noise</description><generator>Wowchemy (https://wowchemy.com)</generator><language>en-uk</language><lastBuildDate>Thu, 30 Jun 2016 00:00:00 +0000</lastBuildDate><image><url>https://rsouthern.github.io/images/icon_hu0365f2187e15210a9118469a64220edc_142871_512x512_fill_lanczos_center_2.png</url><title>noise</title><link>https://rsouthern.github.io/tag/noise/</link></image><item><title>A Templated Implementation of Noise Texture</title><link>https://rsouthern.github.io/post/noisetexture/</link><pubDate>Thu, 30 Jun 2016 00:00:00 +0000</pubDate><guid>https://rsouthern.github.io/post/noisetexture/</guid><description>&lt;h3 id="introduction">Introduction&lt;/h3>
+&lt;p>The icon for this page was from my attempt to recreate a realtime shader for a varnished woodgrain effect. This approach requires the &lt;a href="http://libnoise.sourceforge.net/examples/textures/">combination of multiple layers&lt;/a> of &lt;a href="http://mrl.nyu.edu/~perlin/">Perlin&lt;/a> &lt;a href="https://en.wikipedia.org/wiki/Perlin_noise">noise&lt;/a>, which is probably infeasible to &lt;a href="https://github.com/ashima/webgl-noise/wiki">generate on the fly within the fragment shader&lt;/a> (although I&amp;rsquo;d love to be proven wrong). The generation of the wood grain shader will be saved for another post - in this one I&amp;rsquo;d like to discuss how I implemented a generic C++ template for the initialisation of the &amp;ldquo;general&amp;rdquo; dimensional noise texture on OpenGL.&lt;/p>
+&lt;h3 id="the-high-level-interface">The High Level Interface&lt;/h3>
+&lt;p>The central idea behind this class was to provide the following generalisations:&lt;/p>
+&lt;ol>
+&lt;li>&lt;em>General Dimensional Textures&lt;/em> - noise textures are typically either 2D or 3D (so you can &amp;ldquo;slice through&amp;rdquo; your material and expect a consistent pattern).&lt;/li>
+&lt;li>&lt;em>Generic Generator Functions&lt;/em> - the function that actually generates the noise must be completely generic.&lt;/li>
+&lt;/ol>
+&lt;p>For (1) above, this is realised by using a simple template parameter DIM:&lt;/p>
+&lt;pre>&lt;code class="language-cpp">template &amp;lt;size_t DIM&amp;gt;
+class NoiseTexture
+&lt;/code>&lt;/pre>
+&lt;p>So my interface to creating a 3D texture is something like:&lt;/p>
+&lt;pre>&lt;code class="language-cpp"> MyNoiseTexture&amp;lt;3&amp;gt; m_noise;
+&lt;/code>&lt;/pre>
+&lt;p>For (2), there were several ways to approach this. I could, for example, have passed a generator function / functor class as a template parameter. This would have required me to create different classes for each type of generation. However there are a couple of reasons why I used inheritance instead of this approach (which could be called the &lt;a href="http://www.bogotobogo.com/DesignPatterns/strategy.php">strategy pattern&lt;/a>):&lt;/p>
+&lt;ul>
+&lt;li>A function cannot store state, which is need for many noise generators, for example &lt;a href="http://www.boost.org/doc/libs/1_61_0/doc/html/boost_random.html">boost&lt;/a> or &lt;a href="http://libnoise.sourceforge.net/index.html">libnoise&lt;/a>,&lt;/li>
+&lt;li>A functor can store state, but will have the same level of class management and complexity as using inheritance, but more importantly&lt;/li>
+&lt;li>I may want to override other parts of the class to support parallel noise generation.&lt;/li>
+&lt;/ul>
+&lt;p>The interface noisetexture.h provides is to inherit from the base class and override the protected function&lt;/p>
+&lt;pre>&lt;code class="language-cpp"> /// A generator function to make the process of building noise easy
+virtual inline GLfloat generator_func(const CoordinateArrayf &amp;amp;) = 0;
+&lt;/code>&lt;/pre>
+&lt;p>This function simply accepts a coordinate in DIM space and returns a floating point value. Note that the NoiseTexture makes use of std::array as it should - this makes sure that this is managed memory rather than pointers. Two different arrays are defined:&lt;/p>
+&lt;pre>&lt;code class="language-cpp"> /// A static (i.e. not dynamic allocated) vector
+typedef std::array&amp;lt;size_t,DIM&amp;gt; CoordinateArray;
+typedef std::array&amp;lt;float, DIM&amp;gt; CoordinateArrayf;
+&lt;/code>&lt;/pre>
+&lt;p>One is for indices and the other for positions. This will be used in the recursive generation of the data block.&lt;/p>
+&lt;h3 id="generating-the-data">Generating the data&lt;/h3>
+&lt;p>Ultimately the initialisation of the OpenGL texture consists of copying a lump of data from the CPU memory to the GPU memory using a call to glTexImage. The following section of code creates the memory, fills it with data and copies it to the GPU:&lt;/p>
+&lt;pre>&lt;code class="language-cpp"> // Allocate a slab of data for the stuffing
+GLfloat *data = (GLfloat*) malloc(sizeof(GLfloat) * pow(m_res,DIM) * 3);
+// Use the recursive function to generate the data recursively
+CoordinateArray coord;
+generate_recurse(DIM, coord, data);
+// Copy our data over to the GPU
+copyTextureDataToGPU(data);
+// Delete our data - it's been copied onto the GPU right?
+free(data);
+&lt;/code>&lt;/pre>
+&lt;p>Unpicking the memory allocation from left to right:&lt;/p>
+&lt;ul>
+&lt;li>sizeof(GLfloat) - the size of an individual value (single precision)&lt;/li>
+&lt;li>pow(m_res,DIM) - the size of the block of data is squared/cubed as you would expect&lt;/li>
+&lt;li>3 - we need RGB values to copy to the GPU&lt;/li>
+&lt;/ul>
+&lt;p>Generate_recurse is defined as follows:&lt;/p>
+&lt;pre>&lt;code class="language-cpp"> /// Recursively generate the data
+virtual void generate_recurse(const size_t &amp;amp;/*dim*/, const CoordinateArray &amp;amp;/*coord*/, GLfloat */*data*/);
+&lt;/code>&lt;/pre>
+&lt;p>It will recursively evaluate the generator function on each of the different positions in the block of memory and write it to the appropriate index:&lt;/p>
+&lt;pre>&lt;code class="language-cpp">template &amp;lt;size_t DIM&amp;gt;
+void NoiseTexture&amp;lt;DIM&amp;gt;::generate_recurse(const size_t &amp;amp;d,
+const CoordinateArray&amp;amp; coord,
+GLfloat *data) {
+size_t dim_length = 1, data_pos = 0, i;
+CoordinateArrayf coordf, tmp;
+CoordinateArray ncoord;
+switch(d) {
+case 0:
+// At the end of the recursion chain we can evaluate the noise function
+for (i=0; i&amp;lt;DIM; ++i) {
+data_pos += coord[i] * dim_length;
+dim_length *= m_res;
+coordf[i] = m_inv_resf * float(coord[i]);
+}
+data_pos *= 3;
+// Fill up the data with data defined by the generator_func()
+for (i=0; i&amp;lt;3; ++i) {
+tmp = coordf; coordf[i] += 1.0f;
+data[data_pos + i] = generator_func(coordf);
+}
+break;
+default:
+// For the rest of the dimensions we recursively call all the remaining coordinates
+ncoord = coord;
+for (i=0; i&amp;lt;m_res; ++i) {
+ncoord[d-1] = i;
+generate_recurse(d-1, ncoord, data);
+}
+}
+}
+&lt;/code>&lt;/pre>
+&lt;p>Note that I have arbitrarily added 1.0f for each of the R, G, B channels to give a bit of a richer data set to play with.&lt;/p>
+&lt;h3 id="opengl-integration">OpenGL integration&lt;/h3>
+&lt;p>There are a number of standard functions which make this class usable in a GL context. For example, the function to find the texture:&lt;/p>
+&lt;pre>&lt;code class="language-cpp">template &amp;lt;size_t DIM&amp;gt;
+void NoiseTexture&amp;lt;DIM&amp;gt;::bind() const {
+if (m_isInit) {
+glBindTexture(m_target, m_texID);
+CheckError(&amp;quot;NoiseTexture&amp;lt;DIM&amp;gt;::bind() - glBindTexture()&amp;quot;);
+}
+}
+&lt;/code>&lt;/pre>
+&lt;p>Note the variable m_target, which is actually a constant, defined using this from within the class declaration:&lt;/p>
+&lt;pre>&lt;code class="language-cpp"> constexpr GLuint target() const {
+switch(DIM) {
+case 1:
+return GL_TEXTURE_1D;
+case 2:
+return GL_TEXTURE_2D;
+case 3:
+return GL_TEXTURE_3D;
+}
+return 0;
+}
+const GLuint m_target = target();
+&lt;/code>&lt;/pre>
+&lt;p>Take a moment to digest this: the function target is actually being executed at &lt;em>compile time&lt;/em>, and this is in fact an example of &lt;a href="https://en.wikipedia.org/wiki/Template_metaprogramming">template metaprogramming&lt;/a> (albeit, a rather simple one). The keyword constexpr allows this function to be executed in setting a constant at compile time. The use of the switch statement (and using multiple return statements in a function) is only allowable in C++14 or better (a simple if-else structure would remove this dependency).&lt;/p>
+&lt;p>The function which copies the data to the GPU is pretty straightforward:&lt;/p>
+&lt;pre>&lt;code class="language-cpp">template &amp;lt;size_t DIM&amp;gt;
+void NoiseTexture&amp;lt;DIM&amp;gt;::copyTextureDataToGPU(GLfloat *data) {
+// Transfer this data to our texture
+glGenTextures(1, &amp;amp;m_texID);
+glBindTexture(m_target, m_texID);
+// Repeat the texture for coordinates &amp;lt;0 or &amp;gt;1
+...
+// Use blending when texels are bigger or smaller than pixels
+...
+// Upload the texture data to the GPU
+switch(DIM) {
+case 1:
+glTexImage1D(m_target, // Target
+0, // Level
+GL_RGB, // Internal Format
+m_res, // width
+0, // border
+GL_RGB, // format
+GL_FLOAT, // type
+data);
+break;
+case 2:
+...
+case 3:
+...
+}
+}
+&lt;/code>&lt;/pre>
+&lt;p>Note that template specialisms could have been used here for the different TexImage calls, but due to the duplication of the texture parameters I decided against it.&lt;/p>
+&lt;h3 id="deriving-your-own-noise-texture-class">Deriving your own Noise Texture class&lt;/h3>
+&lt;p>The simplest example of a derived noise texture class is one which just sets the values in the data block to 1. This is demonstrated in testnoisetexture.h:&lt;/p>
+&lt;pre>&lt;code class="language-cpp">template&amp;lt;size_t DIM&amp;gt;
+class TestNoiseTexture : public NoiseTexture&amp;lt;DIM&amp;gt; {
+public:
+/// Constructor
+explicit TestNoiseTexture(float /*lower*/ = 0.0f,
+float /*upper*/ = 1.0f,
+size_t /*resolution*/ = 64);
+/// Dtor
+~TestNoiseTexture() {}
+protected:
+/// Specialisation of this class to generate pure white noise
+inline GLfloat generator_func(const typename NoiseTexture&amp;lt;DIM&amp;gt;::CoordinateArrayf &amp;amp;);
+};
+template&amp;lt;size_t DIM&amp;gt;
+TestNoiseTexture&amp;lt;DIM&amp;gt;::TestNoiseTexture(float _lower,
+float _upper,
+size_t _resolution)
+: NoiseTexture&amp;lt;DIM&amp;gt;(_lower,_upper,_resolution) {}
+template&amp;lt;size_t DIM&amp;gt;
+inline GLfloat TestNoiseTexture&amp;lt;DIM&amp;gt;::generator_func(const typename NoiseTexture&amp;lt;DIM&amp;gt;::CoordinateArrayf &amp;amp;coord) {
+return 1.0f;
+}
+&lt;/code>&lt;/pre>
+&lt;p>As you see above, all you need to do here is override the virtual generator_func with your own favourite noise generator. See the whitenoisetexture.h example for something a little more interesting. I&amp;rsquo;ll be looking to write a post about how this method was used to create the wood shader soon.&lt;/p>
+&lt;h3 id="downloads">Downloads&lt;/h3>
+&lt;p>Download the source files for these here:&lt;/p>
+&lt;ul>
+&lt;li>&lt;a href="noisetexture.h">noisetexture.h&lt;/a>&lt;/li>
+&lt;li>&lt;a href="testnoisetexture.h">testnoisetexture.h&lt;/a>&lt;/li>
+&lt;li>&lt;a href="whitenoisetexture.h">whitenoisetexture.h&lt;/a>&lt;/li>
+&lt;/ul></description></item></channel></rss>

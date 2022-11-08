@@ -1,0 +1,114 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes"?><rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom"><channel><title>glsl | Richard's Blog</title><link>https://rsouthern.github.io/tag/glsl/</link><atom:link href="https://rsouthern.github.io/tag/glsl/index.xml" rel="self" type="application/rss+xml"/><description>glsl</description><generator>Wowchemy (https://wowchemy.com)</generator><language>en-uk</language><lastBuildDate>Fri, 01 Jun 2018 00:00:00 +0000</lastBuildDate><image><url>https://rsouthern.github.io/images/icon_hu0365f2187e15210a9118469a64220edc_142871_512x512_fill_lanczos_center_2.png</url><title>glsl</title><link>https://rsouthern.github.io/tag/glsl/</link></image><item><title>Principal Curvature Aligned Anisotropic Shading</title><link>https://rsouthern.github.io/post/curv/</link><pubDate>Fri, 01 Jun 2018 00:00:00 +0000</pubDate><guid>https://rsouthern.github.io/post/curv/</guid><description>&lt;p>In this post I will discuss the math and code behind a method to generate the automated orientation of a shading vector field using the intrinsic geometric properties of the object.&lt;/p>
+&lt;h3 id="background">Background&lt;/h3>
+&lt;p>Anisotropic reflectance models are handy for modeling shading behaviours at the microfacet level which conform with some sort of oriented field, for example, brushed metal:
+&lt;img src="Brushed_Aluminium.jpg" alt="Brushed aluminum">&lt;/p>
+&lt;p>The &lt;a href="http://radsite.lbl.gov/radiance/papers/sg92/paper.html">Ward anisotropic specular reflectance model&lt;/a> can (after some simplification, for which I unfortunately do not have a clear reference) be stated as:
+\begin{equation}
+\frac{(\mathbf{l}\cdot \mathbf{n})}{(\mathbf{v}\cdot \mathbf{n})} \exp \left( -2 \frac{ \left(\frac{\mathbf{h}\cdot\mathbf{x}}{\alpha_x} \right)^2 + \left(\frac{\mathbf{h}\cdot \mathbf{y}}{\alpha_y} \right)^2}{(1+\mathbf{h} \cdot \mathbf{n})}\right),
+\end{equation}
+where \(\mathbf{n}\) is the surface normal at a point, $\mathbf{l}$ is the vector from the point to the light source, \(\mathbf{v}\) is the vector from the point to the eye and \(\mathbf{h}\) is the half vector defined as \(\mathbf{h}=(\mathbf{l}+\mathbf{v})/\|\cdot \| \). The important anisotropic bits are the vectors \(\mathbf{x}, \mathbf{y}\), which define the (orthogonal) directions of anisotropy, and \(\alpha_x\) and \(\alpha_y\) define the standard deviation of the surface slope in the \(\mathbf{x}\) and \(\mathbf{y}\) directions respectively. They scale the &amp;ldquo;amount&amp;rdquo; of anisotropy in each of the directions. Note that \(\mathbf{x}\), \(\mathbf{y}\), and \(\mathbf{n}\), should define an orthogonal coordinate frame.&lt;/p>
+&lt;p>This might be implemented in a fragment shader as something similar to this:&lt;/p>
+&lt;pre>&lt;code class="language-cpp"> vec3 halfwayVector = normalize(lightDirection + viewDirection);
+vec3 normalDirection = normalize(FragNormal);
+vec3 tangentDirection = normalize(FragK1);
+vec3 binormalDirection = normalize(FragK2); // this also works: cross(normalDirection, tangentDirection);
+float dotLN = dot(lightDirection, normalDirection);
+vec3 diffuseReflection = attenuation * Light.Ld * Material.Kd * max(0.0, dotLN);
+float dotHN = dot(halfwayVector, normalDirection);
+float dotVN = dot(viewDirection, normalDirection);
+float dotHTAlphaX = dot(halfwayVector, tangentDirection) / alphaX;
+float dotHBAlphaY = dot(halfwayVector, binormalDirection) / alphaY;
+vec3 specularReflection;
+if (dotLN &amp;lt; 0.0) // light source on the wrong side?
+{specularReflection = vec3(0.0);} else {
+// light source on the right side
+specularReflection = attenuation * Material.Ks
+* max(0.0,(dotLN/dotVN))
+* exp(-2.0 * (dotHTAlphaX * dotHTAlphaX + dotHBAlphaY * dotHBAlphaY) / (1.0 + dotHN));
+}
+fragColor = vec4(specularReflection + diffuseReflection, 1.0);
+&lt;/code>&lt;/pre>
+&lt;p>In order for us to generate good quality anisotropic fields using this formulation we see that we would have to provide per-pixel values for \(\mathbf{x}\), \(\mathbf{y}\), \(\alpha_x\) and \(\alpha_y\) (note that as \(\mathbf{y}\) is orthogonal to \(\mathbf{x}\) and \(\mathbf{n}\) so theoretically this can be deduced). Typically in a shader the vector field would be inferred by interpolation from a texture map containing direction vectors. As this involves a lot of effort, I looked into something a little more automated.&lt;/p>
+&lt;h3 id="lines-of-principal-curvature">Lines of Principal Curvature&lt;/h3>
+&lt;p>Most interesting surfaces are curved in some way. You&amp;rsquo;re probably already familiar with the concept of a &lt;em>normal&lt;/em> to a surface: if we zoom in enough to a surface (or manifold) it will look pretty flat. The vector defining the orientation of this plane is called a normal at a point on the surface.&lt;/p>
+&lt;p>Interestingly there are two other vectors that are defined in that tangent plane - one defines the direction and magnitude in which the rate the normal changes across the surface is at a &lt;em>maximum&lt;/em>, and other the &lt;em>least&lt;/em> - these are called the maximum and minimum principal curvature directions respectively, and are often symbolized by \(\mathbf{k}_1\) and \(\mathbf{k}_2\) respectively.&lt;/p>
+&lt;center>&lt;img width=50% src="https://upload.wikimedia.org/wikipedia/commons/e/eb/Minimal_surface_curvature_planes-en.svg"/>&lt;/center>
+The &lt;a href="https://en.wikipedia.org/wiki/Principal_curvature">figure&lt;/a> above demonstrates the principal curvature directions for a saddle point, which lie in the orthogonal bisecting planes which intersect at the point where the curvature is measured. Interestingly a geometrically perfect saddle point and sphere would have $ \\|\mathbf{k}_1\\| = \\|\mathbf{k}_2\\| $.
+&lt;p>These vectors are defined at all points over a smooth surface, and seem like a good choice for an intrinsic surface property suitable for defining our shading orientation, i.e. let \(\mathbf{k}_1 = \alpha_x \mathbf{x}\) and \(\mathbf{k}_2 = \alpha_y \mathbf{y}\). However there is a snag - the flow of the principal curvature direction is undefined, e.g. \(\mathbf{k}_1, \mathbf{k}_2\) and \(-\mathbf{k}_1, -\mathbf{k}_2\) are both equally valid principle curvature directions at any point as the frame can be arbitrarily flipped around (which we&amp;rsquo;ll see later is a bit of a problem).&lt;/p>
+&lt;h3 id="computing-the-principal-curvature-directions">Computing the Principal Curvature Directions&lt;/h3>
+&lt;p>There are a number of methods to compute principal curvature directions over a triangle mesh. I&amp;rsquo;m not going to dwell on it here. The library I used for this is &lt;a href="https://github.com/libigl/libigl">libigl&lt;/a> which provides a simple header only library based on the math library &lt;a href="http://eigen.tuxfamily.org">Eigen&lt;/a>. The full explanation of how libigl deduces the principle curvature directions is described &lt;a href="http://libigl.github.io/libigl/tutorial/tutorial.html#curvaturedirections">here&lt;/a>.&lt;/p>
+&lt;p>The code for loading up a mesh, deducing vertex normals and extracting the principal curvature directions is below:&lt;/p>
+&lt;pre>&lt;code class="language-cpp"> // Read a mesh from a file into igl
+MatrixXfr V;
+MatrixXir F;
+igl::read_triangle_mesh(filename, V, F);
+// Determine the smooth corner normals
+MatrixXfr N;
+igl::per_vertex_normals(V,F,N);
+// Compute the principle curvature directions and magnitude using quadric fitting
+MatrixXfr K1,K2;
+Eigen::VectorXf KV1,KV2;
+igl::principal_curvature(V,F,K1,K2,KV1,KV2);
+&lt;/code>&lt;/pre>
+&lt;p>Note that the KV1 and KV2 hold the magnitude of each vector (K1 and K2 are normalized). This seemed a bit wasteful so I recombined these into a single vertex structure which contained the position, normal and scaled \(\mathbf{k}_1\) and \(\mathbf{k}_2\):&lt;/p>
+&lt;pre>&lt;code class="language-cpp"> MatrixXfr KV1_mat(K1.rows(), K1.cols()); KV1_mat &amp;lt;&amp;lt; KV1,KV1,KV1;
+MatrixXfr KV2_mat(K2.rows(), K2.cols()); KV2_mat &amp;lt;&amp;lt; KV2,KV2,KV2;
+K1.array() = KV1_mat.array() * K1.array();
+K2.array() = KV2_mat.array() * K2.array();
+// Now concatenate our per vertex data into a big chunk of data in Eigen
+MatrixXfr Vertices(V.rows(), V.cols() + N.cols() + K1.cols() + K2.cols());
+Vertices &amp;lt;&amp;lt; V, N, K1, K2;
+&lt;/code>&lt;/pre>
+&lt;p>Be wary as what these libraries gain in ease of use they sacrifice in terms of performance, so the application takes quite a while on startup to compute these matrices and vectors.&lt;/p>
+&lt;p>The curvature vectors generated using this process can be visualised as follows:
+&lt;img src="curvatureshading_wrong_vectors.png" alt="Unoriented curvature vectors">
+In this case the coordinate frame at each point is defined by the normal (in red), \(\mathbf{k}_1\), the maximum curvature direction and magnitude (in blue) and \(\mathbf{k}_2\), the minimum curvature direction (in green).&lt;/p>
+&lt;h3 id="early-results">Early results&lt;/h3>
+&lt;p>This all sounds like a great idea, but when we render these vectors, we get something a bit unexpected:
+&lt;img src="curvatureshading_wrong.png" alt="Unoriented curvature shading">
+Actually, these results are entirely predictable. For a first implementation, the curvatures are defined as vertex properties, which are simply passed on to the fragment shader to shade. This means that the curvatures are being &lt;em>intepolated across the face per fragment&lt;/em>.&lt;/p>
+&lt;p>Looking at the curvature directions from the previous section, we can see that the curvature vectors do not define a consistent flow over the surface. This is because the curvature is deduced independently at each vertex, and perfectly valid in either direction of flow, e.g. I could rotate by 180 degrees about the normal and the principle curvature directions are the same.&lt;/p>
+&lt;p>To the Ward shading algorithm it doesn&amp;rsquo;t matter, as \(\mathbf{x}\) and \(\mathbf{y}\) are effectively squared so the sign will disappear. However, during rasterization the vectors will be interpolated across the face - the curvature vectors at the corners of a face may be pointing in opposite directions, which means that the interpolated vector will sweep between them.&lt;/p>
+&lt;p>One option is to re-orient all of the curvature vectors as a preprocess. The only method I&amp;rsquo;m aware of to consistently orient the curvature field is based on the method described in &lt;a href="https://dl.acm.org/citation.cfm?id=882296">Anisotropic Polygonal Remeshing&lt;/a> by Alliez et al. (also available &lt;a href="ftp://ftp-sop.inria.fr/prisme/alliez/anisotropic.pdf">[here]&lt;/a>) but this involves smoothing the tensor field, identifying umbilics and iteratively growing streamlines across the surface, which seemed somewhat tedious.&lt;/p>
+&lt;h3 id="curvature-direction-correction-on-the-gpu">Curvature Direction Correction on the GPU&lt;/h3>
+&lt;p>One of the convenient properties of the rendering process is that the triangle mesh (which may have shared vertex properties) is essentially broken up into independent triangles for the purposes of rendering as fragments. This effectively means that the vertex properties will be duplicated for each corner of each face coincident on a vertex.&lt;/p>
+&lt;p>Each face with the vertex properties to be interpolated are passed on to a Geometry Shader before the Fragment Shading stage of the pipeline. At this stage we are free to flip around \(\mathbf{k}_1\) and \(\mathbf{k}_2\) in order to ensure that all the curvature vectors at the corners are consistently oriented for this particular face. Note that which a neighbouring face might have these vectors oriented in a different direction, it doesn&amp;rsquo;t matter due to the properties of the Ward shading model.&lt;/p>
+&lt;pre>&lt;code class="language-cpp">void main() {
+// The first triangle vertex is just going to be copied across
+gl_Position = gl_in[0].gl_Position;
+FragPosition = GeoPosition[0];
+FragNormal = GeoNormal[0];
+FragK1 = GeoK1[0];
+FragK2 = GeoK2[0];
+EmitVertex();
+for(int i = 1; i &amp;lt; 3; ++i) {
+// Copy across the vertex position
+gl_Position = gl_in[i].gl_Position;
+FragPosition = GeoPosition[i];
+FragNormal = GeoNormal[i];
+// Determine whether the curvature is flipped, if so, correct the curvature normal
+FragK1 = ((dot(GeoK1[0], GeoK1[i]) &amp;lt; 0.0)?-1.0:1.0) * GeoK1[i];
+FragK2 = ((dot(GeoK2[0], GeoK2[i]) &amp;lt; 0.0)?-1.0:1.0) * GeoK2[i];
+// Emit the vertex of this primitive
+EmitVertex();
+}
+// Finish the triangle (strip)
+EndPrimitive();
+}
+&lt;/code>&lt;/pre>
+&lt;p>As you can see all this does is copy across the first vertex, and then copy across the other two triangle vertices, but first possibly flipping the curvature vectors if they are oriented differently to the first vertex. Not particularly high-brow stuff, but it gets the job done.&lt;/p>
+&lt;h3 id="final-results">Final Results&lt;/h3>
+&lt;p>Here is the bust model with three different scalings of the anisotropy aligned to the principle curvature directions:&lt;/p>
+&lt;table width=100%>
+&lt;tr>
+&lt;td> &lt;img width=100% src="bust01.png"/>&lt;/td>
+&lt;td>&lt;img width=100% src="bust02.png"/>&lt;/td>
+&lt;td>&lt;img width=100% src="bust03.png"/>&lt;/td>
+&lt;/tr>
+&lt;/table>
+&lt;p>While the face flipping problem has been fixed, the obvious issue with these results in that the curvature is not particularly smooth, mainly because of the resolution of the model but also because there has been not smoothing of the vector field. There are also issues relating to the placement of umbilics. These things could be improved by performing smoothing as described in &lt;a href="https://dl.acm.org/citation.cfm?id=882296">this method&lt;/a> or using a mesh with a higher resolution. In addition, a method which allows the user to &amp;ldquo;hide&amp;rdquo; umbilic points in geometric areas where they won&amp;rsquo;t be seen would be useful.&lt;/p>
+&lt;h3 id="downloads">Downloads&lt;/h3>
+&lt;p>The source code is hosted on &lt;a href="https://github.com/rsouthern/Examples">GitHub&lt;/a>. Clone it from the repository using the following command from your console:&lt;/p>
+&lt;pre>&lt;code class="language-shell">git clone https://github.com/rsouthern/Examples
+&lt;/code>&lt;/pre>
+&lt;p>This example is under rendering/curv.&lt;/p></description></item></channel></rss>
