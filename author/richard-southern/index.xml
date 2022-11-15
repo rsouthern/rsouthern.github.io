@@ -1,1 +1,91 @@
-<?xml version="1.0" encoding="utf-8" standalone="yes"?><rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom"><channel><title>Richard Southern | Richard's Blog</title><link>https://rsouthern.github.io/author/richard-southern/</link><atom:link href="https://rsouthern.github.io/author/richard-southern/index.xml" rel="self" type="application/rss+xml"/><description>Richard Southern</description><generator>Wowchemy (https://wowchemy.com)</generator><language>en-uk</language><lastBuildDate>Sat, 01 Mar 2003 00:00:00 +0000</lastBuildDate><image><url>https://rsouthern.github.io/images/icon_hu0365f2187e15210a9118469a64220edc_142871_512x512_fill_lanczos_center_2.png</url><title>Richard Southern</title><link>https://rsouthern.github.io/author/richard-southern/</link></image><item><title>Creation and control of real-time continuous level of detail on programmable graphics hardware</title><link>https://rsouthern.github.io/publication/geomorph/</link><pubDate>Sat, 01 Mar 2003 00:00:00 +0000</pubDate><guid>https://rsouthern.github.io/publication/geomorph/</guid><description/></item></channel></rss>
+<?xml version="1.0" encoding="utf-8" standalone="yes"?><rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom"><channel><title>Richard Southern | Richard's Blog</title><link>https://rsouthern.github.io/author/richard-southern/</link><atom:link href="https://rsouthern.github.io/author/richard-southern/index.xml" rel="self" type="application/rss+xml"/><description>Richard Southern</description><generator>Wowchemy (https://wowchemy.com)</generator><language>en-uk</language><lastBuildDate>Tue, 25 Jun 2019 00:00:00 +0000</lastBuildDate><image><url>https://rsouthern.github.io/author/richard-southern/avatar_hu8b4b6ae9a405f1b6aee3b6ae457da189_173063_270x270_fill_q90_lanczos_center.jpg</url><title>Richard Southern</title><link>https://rsouthern.github.io/author/richard-southern/</link></image><item><title>On the use of Particle-in-Cell methods in Visual Effects</title><link>https://rsouthern.github.io/publication/pic/</link><pubDate>Tue, 25 Jun 2019 00:00:00 +0000</pubDate><guid>https://rsouthern.github.io/publication/pic/</guid><description>&lt;h4 id="media">Media&lt;/h4>
+&lt;p>Access talk slides and accompanying notes &lt;a href="http://eprints.bournemouth.ac.uk/33939/" target="_blank" rel="noopener">here&lt;/a>.&lt;/p></description></item><item><title>Energy-based dissolution simulation using SPH sampling</title><link>https://rsouthern.github.io/publication/dissolution2/</link><pubDate>Fri, 12 Jan 2018 00:00:00 +0000</pubDate><guid>https://rsouthern.github.io/publication/dissolution2/</guid><description>&lt;h4 id="paper">Paper&lt;/h4>
+&lt;p>A preprint of the paper is available &lt;a href="http://eprints.bournemouth.ac.uk/30229/">[here]&lt;/a> (under embargo until 12/01/2019).&lt;/p>
+&lt;h4 id="media">Media&lt;/h4>
+&lt;center>
+&lt;iframe width="560" height="315" src="https://www.youtube.com/embed/X9SmiLtsaxg?ecver=1" frameborder="0" allow="autoplay; encrypted-media" allowfullscreen>&lt;/iframe>
+&lt;/center></description></item><item><title>Physically-based Droplet Interaction</title><link>https://rsouthern.github.io/publication/droplets/</link><pubDate>Fri, 28 Jul 2017 00:00:00 +0000</pubDate><guid>https://rsouthern.github.io/publication/droplets/</guid><description>&lt;h4 id="paper">Paper&lt;/h4>
+&lt;p>Paper available on institutional repository &lt;a href="http://eprints.bournemouth.ac.uk/29608/">[HERE]&lt;/a>&lt;/p>
+&lt;h4 id="media">Media&lt;/h4>
+&lt;center>
+&lt;iframe width="640" height="360" src="https://www.youtube.com/embed/hBtEWpFvFYY?ecver=1" frameborder="0" allowfullscreen>&lt;/iframe>
+&lt;/center></description></item><item><title>Blue Noise Sampling using an SPH-based Method</title><link>https://rsouthern.github.io/publication/sphsampling/</link><pubDate>Sun, 08 Nov 2015 00:00:00 +0000</pubDate><guid>https://rsouthern.github.io/publication/sphsampling/</guid><description>&lt;h4 id="media">Media&lt;/h4>
+&lt;center>
+&lt;iframe src="//www.slideshare.net/slideshow/embed_code/key/fczVYj0kQ9dEFC" width="595" height="485" frameborder="0" marginwidth="0" marginheight="0" scrolling="no" style="border:1px solid #CCC; border-width:1px; margin-bottom:5px; max-width: 100%;" allowfullscreen> &lt;/iframe> &lt;div style="margin-bottom:5px"> &lt;strong> &lt;a href="//www.slideshare.net/RichardSouthern2/blue-noise-sampling-using-an-sphbased-method" title="Blue Noise Sampling using an SPH-based Method" target="_blank">Blue Noise Sampling using an SPH-based Method&lt;/a> &lt;/strong> from &lt;strong>&lt;a href="//www.slideshare.net/RichardSouthern2" target="_blank">Richard Southern&lt;/a>&lt;/strong> &lt;/div>
+&lt;/center>
+&lt;h4 id="source-code">Source Code&lt;/h4>
+&lt;table>
+&lt;tr>
+&lt;td width=50%>
+&lt;img align=left width=100% src="multiclass_icon.png"/>
+An implementation of multiclass sampling using our SPH sampling method. Implemented in C++ in Visual Studio. Windows binary included.
+&lt;a href="../../rsouthern/Downloads/SPH_sampling_multiclass_v1.zip">[Download]&lt;/a>
+&lt;/td>
+&lt;td width=50%>
+&lt;img align=left width=100% src="surface_icon.png"/>
+An implementation of surface sampling using our SPH sampling method. Implemented in C++ in Visual Studio. Windows binary included.
+&lt;a href="../../rsouthern/Downloads/SPH_sampling_surface_v1.zip">[Download]&lt;/a>
+&lt;/td>
+&lt;/tr>
+&lt;/table></description></item><item><title>A Particle-based Dissolution Model using Chemical Collision Energy</title><link>https://rsouthern.github.io/publication/dissolution/</link><pubDate>Wed, 11 Mar 2015 00:00:00 +0000</pubDate><guid>https://rsouthern.github.io/publication/dissolution/</guid><description>&lt;p>&lt;em>Winner of NVIDIA Best Paper and Best Student Paper awards!&lt;/em>&lt;/p>
+&lt;h4 id="paper">Paper&lt;/h4>
+&lt;p>A preprint of the paper is available &lt;a href="http://eprints.bournemouth.ac.uk/22721/">[here]&lt;/a>.&lt;/p>
+&lt;h4 id="media">Media&lt;/h4>
+&lt;center>
+&lt;iframe width="480" height="320" src="https://www.youtube.com/embed/R7bqM_Tonu0" frameborder="0" allowfullscreen>&lt;/iframe>
+&lt;/center></description></item><item><title>Adaptive Motion Synthesis for Virtual Characters - A Survey</title><link>https://rsouthern.github.io/publication/motionsurvey/</link><pubDate>Sat, 01 Mar 2014 00:00:00 +0000</pubDate><guid>https://rsouthern.github.io/publication/motionsurvey/</guid><description/></item><item><title>Motion Adaptation With Motor Invariant Theory</title><link>https://rsouthern.github.io/publication/motorinvariant/</link><pubDate>Sat, 01 Jun 2013 00:00:00 +0000</pubDate><guid>https://rsouthern.github.io/publication/motorinvariant/</guid><description>&lt;h4 id="media">Media&lt;/h4>
+&lt;center>
+&lt;iframe src="https://player.vimeo.com/video/139934060" width=100% height="320" frameborder="0" allowfullscreen>&lt;/iframe>
+&lt;/center>
+&lt;center>
+&lt;iframe src="//www.slideshare.net/slideshow/embed_code/key/xCpNnvFEbmlz4A" width="595" height="485" frameborder="0" marginwidth="0" marginheight="0" scrolling="no" style="border:1px solid #CCC; border-width:1px; margin-bottom:5px; max-width: 100%;" allowfullscreen> &lt;/iframe> &lt;div style="margin-bottom:5px"> &lt;strong> &lt;a href="//www.slideshare.net/RichardSouthern2/a-theory-for-motion-primitive-adaptation" title="A Theory for Motion Primitive Adaptation" target="_blank">A Theory for Motion Primitive Adaptation&lt;/a> &lt;/strong> from &lt;strong>&lt;a href="//www.slideshare.net/RichardSouthern2" target="_blank">Richard Southern&lt;/a>&lt;/strong> &lt;/div>
+&lt;/center></description></item><item><title>The impact of enhanced projector display on the responses of people to a violent scenario in immersive virtual reality</title><link>https://rsouthern.github.io/publication/projectors/</link><pubDate>Mon, 18 Mar 2013 00:00:00 +0000</pubDate><guid>https://rsouthern.github.io/publication/projectors/</guid><description>&lt;h4 id="media">Media&lt;/h4>
+&lt;center>
+&lt;iframe width=480 height=320 src="https://www.youtube.com/embed/lq-uxFnotHc" frameborder="0" allowfullscreen>&lt;/iframe>
+&lt;/center></description></item><item><title>Automatic cage construction for retargeted muscle fitting</title><link>https://rsouthern.github.io/publication/cagebased/</link><pubDate>Fri, 01 Mar 2013 00:00:00 +0000</pubDate><guid>https://rsouthern.github.io/publication/cagebased/</guid><description>&lt;h4 id="media">Media&lt;/h4>
+&lt;center>
+&lt;iframe width="480" height="320" src="https://www.youtube.com/embed/9uGBFbvoN_4" frameborder="0" allowfullscreen>&lt;/iframe>
+&lt;/center>
+&lt;pre>&lt;code>@article{
+year={2013},
+issn={0178-2789},
+journal={The Visual Computer},
+volume={29},
+number={5},
+doi={10.1007/s00371-012-0739-3},
+title={Automatic cage construction for retargeted muscle fitting},
+url={http://dx.doi.org/10.1007/s00371-012-0739-3},
+publisher={Springer-Verlag},
+keywords={Muscle modelling; Character animation},
+author={Yang, Xiaosong and Chang, Jian and Southern, Richard and Zhang, JianJ.},
+pages={369-380},
+}
+&lt;/code>&lt;/pre></description></item><item><title>Bystander Responses to a Violent Incident in an Immersive Virtual Environment</title><link>https://rsouthern.github.io/publication/bystander/</link><pubDate>Wed, 02 Jan 2013 00:00:00 +0000</pubDate><guid>https://rsouthern.github.io/publication/bystander/</guid><description>&lt;h4 id="media">Media&lt;/h4>
+&lt;center>
+&lt;iframe width=480 height=320 src="https://www.youtube.com/embed/lq-uxFnotHc" frameborder="0" allowfullscreen>&lt;/iframe>
+&lt;iframe src="https://player.vimeo.com/video/57925880" width="480" height="320" frameborder="0" webkitallowfullscreen mozallowfullscreen allowfullscreen>&lt;/iframe>
+&lt;/center>
+&lt;center>
+&lt;iframe src="//www.slideshare.net/slideshow/embed_code/key/tjfSBtC9VyUzKU" width="595" height="485" frameborder="0" marginwidth="0" marginheight="0" scrolling="no" style="border:1px solid #CCC; border-width:1px; margin-bottom:5px; max-width: 100%;" allowfullscreen> &lt;/iframe> &lt;div style="margin-bottom:5px"> &lt;strong> &lt;a href="//www.slideshare.net/RichardSouthern2/virtual-reality-in-experimental-psychology" title="Virtual Reality in Experimental Psychology" target="_blank">Virtual Reality in Experimental Psychology&lt;/a> &lt;/strong> from &lt;strong>&lt;a href="//www.slideshare.net/RichardSouthern2" target="_blank">Richard Southern&lt;/a>&lt;/strong> &lt;/div>
+&lt;/center>
+&lt;h4 id="press">Press&lt;/h4>
+&lt;ul>
+&lt;li>&lt;a href="http://youtu.be/11NH0K23nEM">BBC London 2013&lt;/a>&lt;/li>
+&lt;li>&lt;a href="http://in.reuters.com/video/2013/02/21/3d-study-offers-clues-to-violence-and-by?videoId=241246979">Reuters 2013&lt;/a>&lt;/li>
+&lt;li>&lt;a href="http://news.bbc.co.uk/1/hi/magazine/8761745.stm">BBC News 2010&lt;/a>&lt;/li>
+&lt;/ul></description></item><item><title>Motion-Sensitive Anchor Identification of Least-Squares Meshes from Examples</title><link>https://rsouthern.github.io/publication/keypoints/</link><pubDate>Wed, 01 Jun 2011 00:00:00 +0000</pubDate><guid>https://rsouthern.github.io/publication/keypoints/</guid><description>&lt;h4 id="media">Media&lt;/h4>
+&lt;center>
+&lt;iframe width="480" height="320" src="https://www.youtube.com/embed/E_1n6eJ0Q4Q" frameborder="0" allowfullscreen>&lt;/iframe>
+&lt;/center></description></item><item><title>Adaptive Physics–Inspired Facial Animation</title><link>https://rsouthern.github.io/publication/physicsface/</link><pubDate>Mon, 01 Jun 2009 00:00:00 +0000</pubDate><guid>https://rsouthern.github.io/publication/physicsface/</guid><description>&lt;h4 id="media">Media&lt;/h4>
+&lt;center>
+&lt;iframe src="//www.slideshare.net/slideshow/embed_code/key/sWZJkIAif5N7zC" width="595" height="485" frameborder="0" marginwidth="0" marginheight="0" scrolling="no" style="border:1px solid #CCC; border-width:1px; margin-bottom:5px; max-width: 100%;" allowfullscreen>&lt;/iframe>
+&lt;/center></description></item><item><title>Fast simulation of skin sliding</title><link>https://rsouthern.github.io/publication/skinslide/</link><pubDate>Mon, 01 Jun 2009 00:00:00 +0000</pubDate><guid>https://rsouthern.github.io/publication/skinslide/</guid><description>&lt;h4 id="media">Media&lt;/h4>
+&lt;center>
+&lt;iframe src="https://player.vimeo.com/video/32458838" width="480" height="320" frameborder="0" webkitallowfullscreen mozallowfullscreen allowfullscreen>&lt;/iframe>
+&lt;/center>
+&lt;center>
+&lt;iframe src="//www.slideshare.net/slideshow/embed_code/key/LtMQQbEZazhpYS" width="595" height="485" frameborder="0" marginwidth="0" marginheight="0" scrolling="no" style="border:1px solid #CCC; border-width:1px; margin-bottom:5px; max-width: 100%;" allowfullscreen> &lt;/iframe> &lt;div style="margin-bottom:5px"> &lt;strong> &lt;a href="//www.slideshare.net/RichardSouthern2/fast-simulation-of-skin-sliding" title="Fast Simulation of Skin Sliding" target="_blank">Fast Simulation of Skin Sliding&lt;/a> &lt;/strong> from &lt;strong>&lt;a href="//www.slideshare.net/RichardSouthern2" target="_blank">Richard Southern&lt;/a>&lt;/strong> &lt;/div>
+&lt;/center></description></item><item><title>A Stateless Client for Progressive View-dependent Transmission</title><link>https://rsouthern.github.io/publication/viewdepend/</link><pubDate>Thu, 01 Mar 2001 00:00:00 +0000</pubDate><guid>https://rsouthern.github.io/publication/viewdepend/</guid><description>&lt;h4 id="media">Media&lt;/h4>
+&lt;center>
+&lt;iframe width="480" height="320" src="https://www.youtube.com/embed/YfG1VgipFvM" frameborder="0" allowfullscreen>&lt;/iframe>
+&lt;/center></description></item></channel></rss>
